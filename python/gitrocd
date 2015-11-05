@@ -10,11 +10,13 @@ import threading
 import time
 import json
 import queue
+import base64
 
 debug = False
 
 cachearea = "/tmp/gitrocache"
 os.system("mkdir -p %s" % (cachearea))
+os.system("rm -f %s/locks/*.lock" % (cachearea))
 
 q = queue.Queue()
 glock = threading.Lock()
@@ -26,14 +28,14 @@ class CannotFindError(BaseException):
 	def __init(self):
 		""
 
-def clone_repo(reponame):
+def clone_repo(url,urlstr,reponame):
 	command = """
-mkdir -p %s
-cd %s
-git clone --bare gitolite3@nuc:%s.git
+mkdir -p %s/%s
+cd %s/%s
+git clone --bare %s:%s.git
 cd %s.git
 git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
-""" % (cachearea,cachearea,reponame,reponame)
+""" % (cachearea,urlstr,cachearea,urlstr,url,reponame,reponame)
 	if debug:
 		print(command)
 		os.system(command)
@@ -43,11 +45,11 @@ git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
 		except subprocess.CalledProcessError:
 			return ""
 
-def rev_parse(reponame,branch):
+def rev_parse(urlstr,reponame,branch):
 	command = """
-cd %s/%s.git
+cd %s/%s/%s.git
 git rev-parse %s
-""" % (cachearea,reponame,branch)
+""" % (cachearea,urlstr,reponame,branch)
 	if debug:
 		print(command)
 	try:
@@ -56,11 +58,11 @@ git rev-parse %s
 		return ""
 	return rev
 
-def git_fetch(reponame):
+def git_fetch(urlstr,reponame):
 	command = """
-cd %s/%s.git
+cd %s/%s/%s.git
 git fetch --tags
-""" % (cachearea,reponame)
+""" % (cachearea,urlstr,reponame)
 	if debug:
 		print(command)
 		os.system(command)
@@ -70,27 +72,27 @@ git fetch --tags
 		except subprocess.CalledProcessError:
 			return ""
 
-def commit_exists(reponame,rev):
+def commit_exists(urlstr,reponame,rev):
 	if debug:
 		print(rev)
 	command = """
-cd %s/%s.git
+cd %s/%s/%s.git
 git rev-list --all --remotes | grep -q %s
 echo $?
-""" % (cachearea,reponame,rev)
+""" % (cachearea,urlstr,reponame,rev)
 	if debug:
 		print(command)
 	missing = int(subprocess.check_output(command, stderr=subprocess.STDOUT,shell=True).decode('utf-8').strip())
 	return not missing
 
-def splitout(reponame,rev):
+def splitout(urlstr,reponame,rev):
 	command = """
-cd %s/%s.git
+cd %s/%s/%s.git
 mkdir -p cache/%s
 chmod -R u+w cache/%s
 git archive %s | tar -x -C cache/%s
 chmod -R a-w cache/%s
-""" % (cachearea,reponame,rev,rev,rev,rev,rev)
+""" % (cachearea,urlstr,reponame,rev,rev,rev,rev,rev)
 	if debug:
 		print(command)
 		os.system(command)
@@ -109,7 +111,8 @@ class WorkerThread(threading.Thread):
 		if debug:
 			print("WorkerThread started")
 		while self.running:
-			(reponame,branch,clientqueue) = q.get()
+			(url,reponame,branch,clientqueue) = q.get()
+			urlstr = base64.b64encode(url.encode('utf-8')).decode('utf-8')
 			available = False
 			while not available:
 				glock.acquire()
@@ -122,22 +125,22 @@ class WorkerThread(threading.Thread):
 				time.sleep(0.1)
 
 			try:
-				if not os.path.isdir("%s/%s.git" % (cachearea,reponame)):
-					clone_repo(reponame)
-					if(not os.path.isdir("%s/%s.git" % (cachearea,reponame))):
+				if not os.path.isdir("%s/%s/%s.git" % (cachearea,urlstr,reponame)):
+					clone_repo(url,urlstr,reponame)
+					if(not os.path.isdir("%s/%s/%s.git" % (cachearea,urlstr,reponame))):
 						raise CannotFindError
 
-				rev = rev_parse(reponame,branch)
+				rev = rev_parse(urlstr,reponame,branch)
 				if debug:
 					print(rev)
 				if rev == branch:
-					if commit_exists(reponame,rev) == 0:
-						git_fetch(reponame)
-						if commit_exists(reponame,rev) == 0:
+					if commit_exists(urlstr,reponame,rev) == 0:
+						git_fetch(urlstr,reponame)
+						if commit_exists(urlstr,reponame,rev) == 0:
 							raise CannotFindError
 				else:
-					git_fetch(reponame)
-					rev = rev_parse(reponame,branch)
+					git_fetch(urlstr,reponame)
+					rev = rev_parse(urlstr,reponame,branch)
 					if rev == "":
 						raise CannotFindError
 
@@ -146,13 +149,13 @@ class WorkerThread(threading.Thread):
 
 				if rev == "":
 					raise CannotFindError
-				if os.path.isdir("%s/%s.git/cache/%s" % (cachearea,reponame,rev)):
+				if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev)):
 					if debug:
 						print("Already exists")
 				else:
-					splitout(reponame,rev)
+					splitout(urlstr,reponame,rev)
 				print("Done with %s (%s)" % (reponame,rev))
-				clientqueue.put((0,'%s/%s.git/cache/%s' % (cachearea,reponame,rev),reponame,rev))
+				clientqueue.put((0,'%s/%s/%s.git/cache/%s' % (cachearea,urlstr,reponame,rev),reponame,rev))
 				glock.acquire()
 				os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
 				glock.release()
@@ -201,11 +204,14 @@ class ClientHandler(threading.Thread):
 							branch = data['commit']
 						else:
 							branch = 'master'
+						if not 'url' in data:
+							raise MissingArgumentError
 						if not 'reponame' in data:
 							raise MissingArgumentError
 						reponame = data['reponame']
-						q.put((reponame,branch,clientqueue))
-						print("Requesting  %s (%s)..." % (reponame,branch))
+						url = data['url']
+						q.put((url,reponame,branch,clientqueue))
+						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
 						requests = requests + 1
 						if debug:
 							print("requests: %d" % requests)
