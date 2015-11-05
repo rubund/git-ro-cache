@@ -65,7 +65,7 @@ git fetch --tags
 		os.system(command)
 	else:
 		try:
-			subprocess.check_output(command, shell=True)
+			subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
 		except subprocess.CalledProcessError:
 			return ""
 
