@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+
+
+import os
+import subprocess
+import sys
+import mysql.connector
+import socket
+import threading
+import time
+import json
+import queue
+
+cachearea = "/tmp/gitrocache"
+os.system("mkdir -p %s" % (cachearea))
+
+q = queue.Queue()
+
+class MissingArgumentError(BaseException):
+	def __init(self):
+		""
+class CannotFindError(BaseException):
+	def __init(self):
+		""
+
+def clone_repo(reponame):
+	command = """
+mkdir -p %s
+cd %s
+git clone --bare gitolite3@nuc:%s.git
+cd %s.git
+git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
+""" % (cachearea,cachearea,reponame,reponame)
+	print(command)
+	os.system(command)
+
+def rev_parse(reponame,branch):
+	command = """
+cd %s/%s.git
+git rev-parse %s
+""" % (cachearea,reponame,branch)
+	print(command)
+	try:
+		rev = subprocess.check_output(command, shell=True).decode('utf-8').strip()
+	except subprocess.CalledProcessError:
+		return ""
+	return rev
+
+def git_fetch(reponame):
+	command = """
+cd %s/%s.git
+git fetch --tags
+""" % (cachearea,reponame)
+	print(command)
+	os.system(command)
+
+def commit_exists(reponame,rev):
+	print(rev)
+	command = """
+cd %s/%s.git
+git rev-list --all --remotes | grep -q %s
+echo $?
+""" % (cachearea,reponame,rev)
+	print(command)
+	missing = int(subprocess.check_output(command,shell=True).decode('utf-8').strip())
+	return not missing
+
+def splitout(reponame,rev):
+	command = """
+cd %s/%s.git
+mkdir -p cache/%s
+chmod -R u+w cache/%s
+git archive %s | tar -x -C cache/%s
+chmod -R a-w cache/%s
+""" % (cachearea,reponame,rev,rev,rev,rev,rev)
+	print(command)
+	os.system(command)
+
+class WorkerThread(threading.Thread):
+	def __init__(self):
+		threading.Thread.__init__(self)
+		self.running = 1
+
+	def run(self):
+		print("WorkerThread started")
+		while self.running:
+			(reponame,branch,clientqueue) = q.get()
+
+			try:
+				if not os.path.isdir("%s/%s.git" % (cachearea,reponame)):
+					clone_repo(reponame)
+					if(not os.path.isdir("%s/%s.git" % (cachearea,reponame))):
+						raise CannotFindError
+
+				rev = rev_parse(reponame,branch)
+				print(rev)
+				if rev == branch:
+					if commit_exists(reponame,rev) == 0:
+						git_fetch(reponame)
+						if commit_exists(reponame,rev) == 0:
+							raise CannotFindError
+				else:
+					git_fetch(reponame)
+					rev = rev_parse(reponame,branch)
+					if rev == "":
+						raise CannotFindError
+
+				print(rev)
+
+				if rev == "":
+					raise CannotFindError
+				if os.path.isdir("%s/%s.git/cache/%s" % (cachearea,reponame,rev)):
+					print("Already exists")
+				else:
+					splitout(reponame,rev)
+				clientqueue.put((0,'%s/%s.git/cache/%s' % (cachearea,reponame,rev),reponame,rev))
+			except CannotFindError:
+				print("Cannot find the specified IP or revision")
+				#send_data['error'] = 'Not found'
+				#send_data['return'] = -1 
+				clientqueue.put((-1,'',reponame,''))
+			q.task_done()
+			
+
+class ClientHandler(threading.Thread):
+
+	def __init__(self, clientsocket, address):
+		threading.Thread.__init__(self)
+		print("Created client handler")
+		self.clientsocket = clientsocket
+		self.address = address
+		self.running = True
+
+	def run(self):
+		clientqueue = queue.Queue()
+		requests = 0
+		print("Client socket running")
+		while self.running:
+			jsondata = self.clientsocket.recv(5000)
+			if not jsondata:
+				break
+			print(jsondata)
+			send_data = {}
+			try:
+				data = json.loads(jsondata.decode('utf-8'))
+				print(data)
+				
+				if 'command' in data:
+					if data['command'] == 'checkout':
+						if 'commit' in data:
+							branch = data['commit']
+						else:
+							branch = 'master'
+						if not 'reponame' in data:
+							raise MissingArgumentError
+						reponame = data['reponame']
+						q.put((reponame,branch,clientqueue))
+						requests = requests + 1
+						print("requests: %d" % requests)
+						print("her")
+
+						send_data['return'] = 0
+					elif data['command'] == 'wait':
+						print("requests: %d" % requests)
+						send_data['symlinks'] = []
+						for i in range(0,requests):
+							element = {}
+							(returncode,symlink,reponame,rev) = clientqueue.get()
+							if returncode == 0:
+								element['symlink'] = symlink
+								element['reponame'] = reponame
+								send_data['symlinks'].append(element)
+							clientqueue.task_done()
+						send_data['return'] = 0
+					elif data['command'] == 'exit':
+						break
+			except ValueError:
+				print("Not valid JSON data")
+			except MissingArgumentError:
+				print("Missing one argument")
+				send_data['error'] = 'Missing argument'
+				send_data['return'] = -1 
+			send_jsondata = json.dumps(send_data)
+			self.clientsocket.send(send_jsondata.encode('utf-8'))
+		self.clientsocket.close()
+		
+
+class ServerThread(threading.Thread):
+	def __init__(self,s):
+		threading.Thread.__init__(self)
+		self.running = 1
+		self.s = s
+		print("Created server thread")
+
+	def run(self):
+		print("Running thread")
+		print("started listening")
+		while self.running:
+			(clientsocket, address) = self.s.accept()	
+			client_handler = ClientHandler(clientsocket,address)
+			client_handler.start()
+		self.s.close()
+
+def listen_incoming():
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	getipsock.connect(("gmail.com",80))
+	myipaddress = str(getipsock.getsockname()[0])
+	getipsock.close()
+
+	s.bind((myipaddress,19999))
+	s.listen(10)
+	server_thread = ServerThread(s)
+	server_thread.start()
+	return server_thread
+
+
+worker_thread = []
+for i in range(0,10):
+	tmp = WorkerThread()
+	worker_thread.append(tmp)
+	tmp.start()
+
+server_thread = listen_incoming()
+
+
+input("gitrocd is running...")
+server_thread.join()
+
+q.join()
