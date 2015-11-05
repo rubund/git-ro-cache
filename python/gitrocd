@@ -162,6 +162,9 @@ class WorkerThread(threading.Thread):
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
 				clientqueue.put((-1,'',reponame,''))
+				glock.acquire()
+				os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
+				glock.release()
 			q.task_done()
 			
 
