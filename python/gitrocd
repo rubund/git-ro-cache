@@ -50,7 +50,7 @@ git rev-parse %s
 	if debug:
 		print(command)
 	try:
-		rev = subprocess.check_output(command, shell=True).decode('utf-8').strip()
+		rev = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()
 	except subprocess.CalledProcessError:
 		return ""
 	return rev
@@ -70,7 +70,8 @@ git fetch --tags
 			return ""
 
 def commit_exists(reponame,rev):
-	print(rev)
+	if debug:
+		print(rev)
 	command = """
 cd %s/%s.git
 git rev-list --all --remotes | grep -q %s
@@ -78,7 +79,7 @@ echo $?
 """ % (cachearea,reponame,rev)
 	if debug:
 		print(command)
-	missing = int(subprocess.check_output(command,shell=True).decode('utf-8').strip())
+	missing = int(subprocess.check_output(command, stderr=subprocess.STDOUT,shell=True).decode('utf-8').strip())
 	return not missing
 
 def splitout(reponame,rev):
@@ -94,7 +95,7 @@ chmod -R a-w cache/%s
 		os.system(command)
 	else:
 		try:
-			subprocess.check_output(command, shell=True)
+			subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
 		except subprocess.CalledProcessError:
 			return ""
 
