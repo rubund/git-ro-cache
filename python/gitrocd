@@ -17,6 +17,7 @@ cachearea = "/tmp/gitrocache"
 os.system("mkdir -p %s" % (cachearea))
 
 q = queue.Queue()
+glock = threading.Lock()
 
 class MissingArgumentError(BaseException):
 	def __init(self):
@@ -109,6 +110,16 @@ class WorkerThread(threading.Thread):
 			print("WorkerThread started")
 		while self.running:
 			(reponame,branch,clientqueue) = q.get()
+			available = False
+			while not available:
+				glock.acquire()
+				if not os.path.isfile("%s/locks/%s.lock" % (cachearea,reponame)):
+					available = True
+					os.system("mkdir -p %s/locks && touch %s/locks/%s.lock" % (cachearea,cachearea,reponame))
+					glock.release()
+					break
+				glock.release()
+				time.sleep(0.1)
 
 			try:
 				if not os.path.isdir("%s/%s.git" % (cachearea,reponame)):
@@ -142,6 +153,10 @@ class WorkerThread(threading.Thread):
 					splitout(reponame,rev)
 				print("Done with %s (%s)" % (reponame,rev))
 				clientqueue.put((0,'%s/%s.git/cache/%s' % (cachearea,reponame,rev),reponame,rev))
+				glock.acquire()
+				os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
+				glock.release()
+
 			except CannotFindError:
 				print("Cannot find the specified IP or revision")
 				#send_data['error'] = 'Not found'
