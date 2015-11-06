@@ -32,7 +32,7 @@ def clone_repo(url,urlstr,reponame):
 	command = """
 mkdir -p %s/%s
 cd %s/%s
-git clone --bare %s:%s.git
+git clone --bare %s%s.git
 cd %s.git
 git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
 """ % (cachearea,urlstr,cachearea,urlstr,url,reponame,reponame)

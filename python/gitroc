@@ -12,11 +12,11 @@ import json
 
 		
 
-def get_one(s,reponame,branch='master'):
+def get_one(s,reponame,url='gitolite3@nuc:',branch='master'):
 	data = {}
 	data['command'] = 'checkout'
 	data['reponame'] = reponame
-	data['url'] = 'gitolite3@nuc'
+	data['url'] = url
 	data['commit'] = branch 
 	jsondata = json.dumps(data)
 	s.send(jsondata.encode('utf-8'))
