@@ -29,6 +29,7 @@ import json
 import queue
 import base64
 import datetime
+import struct
 
 debug = False
 
@@ -62,6 +63,10 @@ class MissingArgumentError(BaseException):
 class CannotFindError(BaseException):
 	def __init(self):
 		""
+
+def send_msg(sock, msg):
+	msg = struct.pack('>I', len(msg)) + msg
+	sock.send(msg)
 
 def clone_repo(url,urlstr,reponame):
 	command = """
@@ -287,7 +292,7 @@ class ClientHandler(threading.Thread):
 				send_data['error'] = 'Missing argument'
 				send_data['return'] = -1 
 			send_jsondata = json.dumps(send_data)
-			self.clientsocket.send(send_jsondata.encode('utf-8'))
+			send_msg(self.clientsocket,send_jsondata.encode('utf-8'))
 		self.clientsocket.close()
 		
 
