@@ -198,7 +198,12 @@ class WorkerThread(threading.Thread):
 				conn = sqlite3.connect('/tmp/gitrocd.db')
 				c = conn.cursor()
 				nowtime = datetime.datetime.now()
-				c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
+				c.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=?", (reponame,rev))
+				row = c.fetchone()
+				if row != None: 
+					c.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
+				else:
+					c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
 				conn.commit()
 				conn.close()
 				dblock.release()
