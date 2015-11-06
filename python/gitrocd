@@ -11,6 +11,7 @@ import time
 import json
 import queue
 import base64
+import datetime
 
 debug = False
 
@@ -179,7 +180,8 @@ class WorkerThread(threading.Thread):
 				dblock.acquire()
 				conn = sqlite3.connect('/tmp/gitrocd.db')
 				c = conn.cursor()
-				c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (0,url,reponame,rev))
+				nowtime = datetime.datetime.now()
+				c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
 				conn.commit()
 				conn.close()
 				dblock.release()
