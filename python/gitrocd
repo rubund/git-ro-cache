@@ -101,7 +101,7 @@ git rev-parse %s
 def git_fetch(urlstr,reponame):
 	command = """
 cd %s/%s/%s.git
-git fetch --tags
+git fetch --tags --all
 """ % (cachearea,urlstr,reponame)
 	if debug:
 		print(command)
@@ -151,7 +151,7 @@ class WorkerThread(threading.Thread):
 		if debug:
 			print("WorkerThread started")
 		while self.running:
-			(url,reponame,branch,clientqueue) = q.get()
+			(url,reponame,branch,clientqueue,mode) = q.get()
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
 			available = False
 			while not available:
@@ -179,7 +179,8 @@ class WorkerThread(threading.Thread):
 						if commit_exists(urlstr,reponame,rev) == 0:
 							raise CannotFindError
 				else:
-					git_fetch(urlstr,reponame)
+					if mode != 1:
+						git_fetch(urlstr,reponame)
 					rev = rev_parse(urlstr,reponame,branch)
 					if rev == "":
 						raise CannotFindError
@@ -214,7 +215,7 @@ class WorkerThread(threading.Thread):
 				dblock.release()
 
 			except CannotFindError:
-				print("Cannot find the specified IP or revision")
+				print("Cannot find the specified IP or revision (%s)" % (reponame))
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
 				clientqueue.put((-1,'',reponame,''))
@@ -261,9 +262,11 @@ class ClientHandler(threading.Thread):
 							raise MissingArgumentError
 						if not 'reponame' in data:
 							raise MissingArgumentError
+						if not 'mode' in data:
+							raise MissingArgumentError
 						reponame = data['reponame']
 						url = data['url']
-						q.put((url,reponame,branch,clientqueue))
+						q.put((url,reponame,branch,clientqueue,mode))
 						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
 						requests = requests + 1
 						if debug:
