@@ -112,7 +112,7 @@ class WorkerThread(threading.Thread):
 			print("WorkerThread started")
 		while self.running:
 			(url,reponame,branch,clientqueue) = q.get()
-			urlstr = base64.b64encode(url.encode('utf-8')).decode('utf-8')
+			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
 			available = False
 			while not available:
 				glock.acquire()
