@@ -179,7 +179,7 @@ class WorkerThread(threading.Thread):
 						if commit_exists(urlstr,reponame,rev) == 0:
 							raise CannotFindError
 				else:
-					if mode != 1:
+					if mode != 1 and 'tags/' not in branch:
 						git_fetch(urlstr,reponame)
 					rev = rev_parse(urlstr,reponame,branch)
 					if rev == "":
