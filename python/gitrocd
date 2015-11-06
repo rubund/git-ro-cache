@@ -264,6 +264,7 @@ class ClientHandler(threading.Thread):
 							raise MissingArgumentError
 						if not 'mode' in data:
 							raise MissingArgumentError
+						mode = data['mode']
 						reponame = data['reponame']
 						url = data['url']
 						q.put((url,reponame,branch,clientqueue,mode))

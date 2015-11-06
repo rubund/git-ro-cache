@@ -26,8 +26,23 @@ import socket
 import threading
 import time
 import json
+import struct
 
-		
+def recv_msg(sock):
+	raw_msglen = sock.recv(4)
+	if not raw_msglen:
+		return None
+	msglen = struct.unpack('>I', raw_msglen)[0]
+	return recvall(sock, msglen)
+
+def recvall(sock, n):
+	data = ''
+	while len(data) < n:
+		packet = sock.recv(n - len(data))
+		if not packet:
+			return None
+		data += packet.decode('utf-8')
+	return data
 
 def get_one(s,reponame,url='gitolite3@nuc:',branch='master'):
 	data = {}
@@ -35,9 +50,10 @@ def get_one(s,reponame,url='gitolite3@nuc:',branch='master'):
 	data['reponame'] = reponame
 	data['url'] = url
 	data['commit'] = branch 
+	data['mode'] = 0
 	jsondata = json.dumps(data)
 	s.send(jsondata.encode('utf-8'))
-	resp = s.recv(5000)
+	resp = recv_msg(s)
 
 def send_message(jsondata=''):
 	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -57,8 +73,8 @@ def send_message(jsondata=''):
 	jsondata = json.dumps(data)
 	s.send(jsondata.encode('utf-8'))
 
-	resp = s.recv(5000)
-	recv_jsondata = json.loads(resp.decode('utf-8'))
+	resp = recv_msg(s)
+	recv_jsondata = json.loads(resp)
 	print(recv_jsondata)
 	if 'symlinks' in recv_jsondata:
 		for symlink in recv_jsondata['symlinks']:
@@ -74,7 +90,7 @@ ln -sfT %s %s
 	data['command'] = 'exit'
 	jsondata = json.dumps(data)
 	s.send(jsondata.encode('utf-8'))
-	resp = s.recv(10)
+	resp = recv_msg(s)
 
 	s.close()
 
