@@ -281,6 +281,7 @@ class ClientHandler(threading.Thread):
 	def run(self):
 		clientqueue = queue.Queue()
 		requests = 0
+		sent_so_far = 0
 		if debug:
 			print("Client socket running")
 		while self.running:
@@ -321,7 +322,7 @@ class ClientHandler(threading.Thread):
 						if debug:
 							print("requests: %d" % requests)
 						send_data['symlinks'] = []
-						for i in range(0,requests):
+						for i in range(sent_so_far,requests):
 							element = {}
 							(returncode,symlink,reponame,rev) = clientqueue.get()
 							if returncode == 0:
@@ -329,6 +330,25 @@ class ClientHandler(threading.Thread):
 								element['reponame'] = reponame
 								send_data['symlinks'].append(element)
 							clientqueue.task_done()
+						send_data['complete'] = True 
+						send_data['return'] = 0
+					elif data['command'] == 'status':
+						if debug:
+							print("requests: %d" % requests)
+						send_data['symlinks'] = []
+						send_data['complete'] = True 
+						for i in range(0,requests):
+							element = {}
+							if not clientqueue.empty():
+								(returncode,symlink,reponame,rev) = clientqueue.get()
+								sent_so_far = sent_so_far + 1
+								if returncode == 0:
+									element['symlink'] = symlink
+									element['reponame'] = reponame
+									send_data['symlinks'].append(element)
+								clientqueue.task_done()
+							else:
+								send_data['complete'] = False
 						send_data['return'] = 0
 					elif data['command'] == 'exit':
 						break
