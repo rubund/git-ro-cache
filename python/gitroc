@@ -89,9 +89,9 @@ def send_message(jsondata=''):
 
 	status = False
 	while status == False:
-		status = get_symlinks(s,'status')
 		time.sleep(1)
-	get_symlinks(s,'wait')
+		status = get_symlinks(s,'status')
+	#get_symlinks(s,'wait')
 
 	#data = {}
 	#data['command'] = 'exit'
