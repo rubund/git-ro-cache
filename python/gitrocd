@@ -30,6 +30,7 @@ import queue
 import base64
 import datetime
 import struct
+import signal
 
 debug = False
 
@@ -420,6 +421,33 @@ def listen_incoming(myipaddress):
 	server_thread.start()
 	return server_thread
 
+running = True
+
+def stop_server():
+	global running
+	running = False
+	# Stopping listening thread:
+	server_thread.running = False
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((myipaddress,19999))
+	s.close()
+
+	# Stopping worker threads
+	cleanup_thread.running = False
+	for w in worker_thread:
+		w.running = False
+		q.put(('quit',None,None,None,None,None,None))
+
+	server_thread.join()
+	for w in worker_thread:
+		w.join()
+	print("Completing cleanup...")
+	cleanup_thread.join()
+
+def signal_handler(signal,frame):
+	stop_server()
+	print("\nServer stopped\nPress enter")
+
 getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 getipsock.connect(("gmail.com",80))
 myipaddress = str(getipsock.getsockname()[0])
@@ -437,26 +465,13 @@ server_thread = listen_incoming(myipaddress)
 cleanup_thread = CleanupThread()
 cleanup_thread.start()
 
+signal.signal(signal.SIGINT, signal_handler)
+
 print("gitrocd is running...")
 cmd = input("")
-while cmd != 'q' and cmd != 'quit':
+while cmd != 'q' and cmd != 'quit' and running:
 	print("Enter 'q' og 'quit' to quit")
 	cmd = input("")
 
-# Stopping listening thread:
-server_thread.running = False
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect((myipaddress,19999))
-s.close()
-
-# Stopping worker threads
-cleanup_thread.running = False
-for w in worker_thread:
-	w.running = False
-	q.put(('quit',None,None,None,None,None,None))
-
-server_thread.join()
-for w in worker_thread:
-	w.join()
-print("Completing cleanup...")
-cleanup_thread.join()
+if running:
+	stop_server()
