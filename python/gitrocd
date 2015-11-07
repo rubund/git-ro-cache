@@ -68,6 +68,23 @@ def send_msg(sock, msg):
 	msg = struct.pack('>I', len(msg)) + msg
 	sock.send(msg)
 
+def lock_repo(reponame):
+	available = False
+	while not available:
+		glock.acquire()
+		if not os.path.isfile("%s/locks/%s.lock" % (cachearea,reponame)):
+			available = True
+			os.system("mkdir -p %s/locks && touch %s/locks/%s.lock" % (cachearea,cachearea,reponame))
+			glock.release()
+			break
+		glock.release()
+		time.sleep(0.1)
+
+def unlock_repo(reponame):
+	glock.acquire()
+	os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
+	glock.release()
+
 def clone_repo(url,urlstr,reponame):
 	command = """
 mkdir -p %s/%s
@@ -142,6 +159,44 @@ chmod -R a-w cache/%s
 		except subprocess.CalledProcessError:
 			return ""
 
+class CleanupThread(threading.Thread):
+	def __init__(self):
+		threading.Thread.__init__(self)
+		self.running = 1
+
+	def run(self):
+		while self.running:
+			dblock.acquire()
+			conn = sqlite3.connect('/tmp/gitrocd.db')
+			c = conn.cursor()
+			nowtime = datetime.datetime.now()
+			c.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" % (nowtime)) # Specify days here
+			rows = c.fetchall()
+			dblock.release()
+			for row in rows:
+				urlstr = base64.urlsafe_b64encode(row[1].encode('utf-8')).decode('utf-8')
+				lock_repo(row[2])
+				command = """
+chmod -R u+w %s/%s/%s.git/cache/%s
+rm -rf %s/%s/%s.git/cache/%s
+""" % (cachearea,urlstr,row[2],row[3],cachearea,urlstr,row[2],row[3])
+				print(command)
+				os.system(command)
+				unlock_repo(row[2])
+
+
+			if len(rows) > 0:
+				dblock.acquire()
+				conn = sqlite3.connect('/tmp/gitrocd.db')
+				c = conn.cursor()
+				for row in rows:
+					query = "delete from gitroc_lastaccess where id=? and git_commit=?"
+					c.execute(query,(row[0],row[3]))
+				conn.commit()
+				conn.close()
+				dblock.release()
+			time.sleep(10)
+
 class WorkerThread(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
@@ -153,16 +208,7 @@ class WorkerThread(threading.Thread):
 		while self.running:
 			(url,reponame,branch,clientqueue,mode) = q.get()
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
-			available = False
-			while not available:
-				glock.acquire()
-				if not os.path.isfile("%s/locks/%s.lock" % (cachearea,reponame)):
-					available = True
-					os.system("mkdir -p %s/locks && touch %s/locks/%s.lock" % (cachearea,cachearea,reponame))
-					glock.release()
-					break
-				glock.release()
-				time.sleep(0.1)
+			lock_repo(reponame)
 
 			try:
 				if not os.path.isdir("%s/%s/%s.git" % (cachearea,urlstr,reponame)):
@@ -197,9 +243,7 @@ class WorkerThread(threading.Thread):
 					splitout(urlstr,reponame,rev)
 				print("Done with %s (%s)" % (reponame,rev))
 				clientqueue.put((0,'%s/%s/%s.git/cache/%s' % (cachearea,urlstr,reponame,rev),reponame,rev))
-				glock.acquire()
-				os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
-				glock.release()
+				unlock_repo(reponame)
 				dblock.acquire()
 				conn = sqlite3.connect('/tmp/gitrocd.db')
 				c = conn.cursor()
@@ -219,9 +263,7 @@ class WorkerThread(threading.Thread):
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
 				clientqueue.put((-1,'',reponame,''))
-				glock.acquire()
-				os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
-				glock.release()
+				unlock_repo(reponame)
 			q.task_done()
 			
 
@@ -341,6 +383,8 @@ for i in range(0,10):
 
 server_thread = listen_incoming()
 
+cleanup_thread = CleanupThread()
+cleanup_thread.start()
 
 print("gitrocd is running...")
 input("")
