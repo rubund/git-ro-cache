@@ -63,11 +63,12 @@ def get_symlinks(s,command):
 
 	resp = recv_msg(s)
 	recv_jsondata = json.loads(resp)
-	print(recv_jsondata)
+	#print(recv_jsondata)
 	if 'symlinks' in recv_jsondata:
 		for symlink in recv_jsondata['symlinks']:
 			if 'symlink'  in symlink:
 				localpath = "ip/%s" % (symlink['reponame'])
+				print(localpath)
 				os.system("""
 mkdir -p %s
 cd %s
@@ -89,7 +90,7 @@ def send_message(jsondata=''):
 
 	status = False
 	while status == False:
-		time.sleep(1)
+		time.sleep(0.2)
 		status = get_symlinks(s,'status')
 	#get_symlinks(s,'wait')
 
