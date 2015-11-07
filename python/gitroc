@@ -55,21 +55,9 @@ def get_one(s,reponame,url='gitolite3@nuc:',branch='master'):
 	s.send(jsondata.encode('utf-8'))
 	resp = recv_msg(s)
 
-def send_message(jsondata=''):
-	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	getipsock.connect(("gmail.com",80))
-	myipaddress = str(getipsock.getsockname()[0])
-	getipsock.close()
-
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((myipaddress,19999))
-
-	get_one(s,'testdevel')
-	get_one(s,'auroranotifier-server')
-
-
+def get_symlinks(s,command):
 	data = {}
-	data['command'] = 'wait'
+	data['command'] = command
 	jsondata = json.dumps(data)
 	s.send(jsondata.encode('utf-8'))
 
@@ -86,12 +74,28 @@ cd %s
 ln -sfT %s %s
 """ % (os.path.dirname(localpath),os.path.dirname(localpath),symlink['symlink'],os.path.basename(localpath)))
 
-	data = {}
-	data['command'] = 'exit'
-	jsondata = json.dumps(data)
-	s.send(jsondata.encode('utf-8'))
-	resp = recv_msg(s)
+def send_message(jsondata=''):
+	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	getipsock.connect(("gmail.com",80))
+	myipaddress = str(getipsock.getsockname()[0])
+	getipsock.close()
 
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((myipaddress,19999))
+
+	get_one(s,'testdevel',branch='06e7ee15b1af2c4886e55db4b76b9aead31ed62a')
+	get_one(s,'auroranotifier-server')
+
+	time.sleep(1)
+	get_symlinks(s,'status')
+	time.sleep(2)
+	get_symlinks(s,'wait')
+
+	#data = {}
+	#data['command'] = 'exit'
+	#jsondata = json.dumps(data)
+	#s.send(jsondata.encode('utf-8'))
+	#resp = recv_msg(s)
 	s.close()
 
 
