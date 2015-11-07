@@ -46,7 +46,7 @@ if not os.path.isfile('/tmp/gitrocd.db'):
 	c.execute("""
 CREATE TABLE `gitroc_lastaccess` (
   `id` INTEGER PRIMARY KEY,
-  `timestamp` datetime ,
+  `timestamp` timestamp ,
   `git_url` varchar(256) ,
   `git_reponame` varchar(256),
   `git_commit` varchar(256)
@@ -198,6 +198,23 @@ rm -rf %s/%s/%s.git/cache/%s
 				dblock.release()
 			time.sleep(10)
 
+def just_updated(url,reponame,rev):
+	justupdated = False
+	dblock.acquire()
+	conn = sqlite3.connect('/tmp/gitrocd.db', detect_types=sqlite3.PARSE_DECLTYPES)
+	c = conn.cursor()
+	nowtime = datetime.datetime.now()
+	c.execute("select id,timestamp from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
+	row = c.fetchone()
+	if row:
+		timestamp = row[1]
+		if(timestamp > nowtime-datetime.timedelta(seconds=10)):
+			print("Just updated (%s)" % (reponame))
+			justupdated = True
+	conn.close()
+	dblock.release()
+	return justupdated
+
 class WorkerThread(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
@@ -207,7 +224,7 @@ class WorkerThread(threading.Thread):
 		if debug:
 			print("WorkerThread started")
 		while self.running:
-			(url,reponame,branch,clientqueue,mode) = q.get()
+			(url,reponame,branch,clientqueue,mode,requestedtime) = q.get()
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
 			lock_repo(reponame)
 
@@ -220,6 +237,7 @@ class WorkerThread(threading.Thread):
 				rev = rev_parse(urlstr,reponame,branch)
 				if debug:
 					print(rev)
+				justupdated = False 
 				if rev == branch:
 					if commit_exists(urlstr,reponame,rev) == 0:
 						git_fetch(urlstr,reponame)
@@ -227,7 +245,9 @@ class WorkerThread(threading.Thread):
 							raise CannotFindError
 				else:
 					if mode != 1 and 'tags/' not in branch:
-						git_fetch(urlstr,reponame)
+						justupdated =just_updated(url,reponame,rev)
+						if not justupdated:
+							git_fetch(urlstr,reponame)
 					rev = rev_parse(urlstr,reponame,branch)
 					if rev == "":
 						raise CannotFindError
@@ -245,19 +265,20 @@ class WorkerThread(threading.Thread):
 				print("Done with %s (%s)" % (reponame,rev))
 				clientqueue.put((0,'%s/%s/%s.git/cache/%s' % (cachearea,urlstr,reponame,rev),reponame,rev))
 				unlock_repo(reponame)
-				dblock.acquire()
-				conn = sqlite3.connect('/tmp/gitrocd.db')
-				c = conn.cursor()
-				nowtime = datetime.datetime.now()
-				c.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
-				row = c.fetchone()
-				if row != None: 
-					c.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
-				else:
-					c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
-				conn.commit()
-				conn.close()
-				dblock.release()
+				if not justupdated:
+					dblock.acquire()
+					conn = sqlite3.connect('/tmp/gitrocd.db')
+					c = conn.cursor()
+					nowtime = datetime.datetime.now()
+					c.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
+					row = c.fetchone()
+					if row != None: 
+						c.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
+					else:
+						c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
+					conn.commit()
+					conn.close()
+					dblock.release()
 
 			except CannotFindError:
 				print("Cannot find the specified IP or revision (%s)" % (reponame))
@@ -311,7 +332,8 @@ class ClientHandler(threading.Thread):
 						mode = data['mode']
 						reponame = data['reponame']
 						url = data['url']
-						q.put((url,reponame,branch,clientqueue,mode))
+						nowtime = datetime.datetime.now()
+						q.put((url,reponame,branch,clientqueue,mode,nowtime))
 						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
 						requests = requests + 1
 						if debug:
