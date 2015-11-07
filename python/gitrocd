@@ -38,6 +38,10 @@ cachearea = "/tmp/gitrocache"
 os.system("mkdir -p %s" % (cachearea))
 os.system("rm -f %s/locks/*.lock" % (cachearea))
 
+clients = []
+clientnum = 0
+clock = threading.Lock()
+
 q = queue.Queue()
 glock = threading.Lock()
 
@@ -299,21 +303,32 @@ class ClientHandler(threading.Thread):
 
 	def __init__(self, clientsocket, address):
 		threading.Thread.__init__(self)
+		global clientnum
 		if debug:
 			print("Created client handler")
 		self.clientsocket = clientsocket
 		self.address = address
 		self.running = True
+		clock.acquire()
+		clients.append((self,clientnum))
+		self.num = clientnum
+		clientnum = clientnum + 1
+		clock.release()
 
 	def run(self):
 		clientqueue = queue.Queue()
 		requests = 0
 		sent_so_far = 0
+		self.clientsocket.settimeout(1)
 		if debug:
 			print("Client socket running")
 		while self.running:
-			jsondata = self.clientsocket.recv(5000)
-			if not jsondata:
+			try:
+				jsondata = self.clientsocket.recv(5000)
+			except socket.timeout:
+				continue
+			if not jsondata or not self.running:
+				self.running = False
 				break
 			if debug:
 				print(jsondata)
@@ -380,6 +395,7 @@ class ClientHandler(threading.Thread):
 								send_data['complete'] = False
 						send_data['return'] = 0
 					elif data['command'] == 'exit':
+						self.running = False
 						break
 			except ValueError:
 				print("Not valid JSON data")
@@ -390,6 +406,14 @@ class ClientHandler(threading.Thread):
 			send_jsondata = json.dumps(send_data)
 			send_msg(self.clientsocket,send_jsondata.encode('utf-8'))
 		self.clientsocket.close()
+		clock.acquire()
+		thisclient = None
+		for client in clients:
+			if client[1] == self.num:
+				print("removing %s from %s" % (client,clients))
+				clients.remove(client)
+				break
+		clock.release()
 		print("stopped client thread")
 		
 
@@ -431,6 +455,16 @@ def stop_server():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	s.connect((myipaddress,19999))
 	s.close()
+
+	clients_to_wait_for = []
+	clock.acquire()
+	for client in clients:
+		client[0].running = False
+		clients_to_wait_for.append(client[0])
+	clock.release()
+
+	for client in clients_to_wait_for:
+		client.join()
 
 	# Stopping worker threads
 	cleanup_thread.running = False
