@@ -325,6 +325,7 @@ class ClientHandler(threading.Thread):
 						for i in range(sent_so_far,requests):
 							element = {}
 							(returncode,symlink,reponame,rev) = clientqueue.get()
+							sent_so_far = sent_so_far + 1
 							if returncode == 0:
 								element['symlink'] = symlink
 								element['reponame'] = reponame
@@ -337,7 +338,7 @@ class ClientHandler(threading.Thread):
 							print("requests: %d" % requests)
 						send_data['symlinks'] = []
 						send_data['complete'] = True 
-						for i in range(0,requests):
+						for i in range(sent_so_far,requests):
 							element = {}
 							if not clientqueue.empty():
 								(returncode,symlink,reponame,rev) = clientqueue.get()

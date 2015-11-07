@@ -73,6 +73,7 @@ mkdir -p %s
 cd %s
 ln -sfT %s %s
 """ % (os.path.dirname(localpath),os.path.dirname(localpath),symlink['symlink'],os.path.basename(localpath)))
+	return recv_jsondata['complete']
 
 def send_message(jsondata=''):
 	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -86,9 +87,10 @@ def send_message(jsondata=''):
 	get_one(s,'testdevel',branch='06e7ee15b1af2c4886e55db4b76b9aead31ed62a')
 	get_one(s,'auroranotifier-server')
 
-	time.sleep(1)
-	get_symlinks(s,'status')
-	time.sleep(2)
+	status = False
+	while status == False:
+		status = get_symlinks(s,'status')
+		time.sleep(1)
 	get_symlinks(s,'wait')
 
 	#data = {}
@@ -97,6 +99,8 @@ def send_message(jsondata=''):
 	#s.send(jsondata.encode('utf-8'))
 	#resp = recv_msg(s)
 	s.close()
+
+
 
 
 #if len(sys.argv) < 2:
