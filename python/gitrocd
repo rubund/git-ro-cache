@@ -172,6 +172,7 @@ class CleanupThread(threading.Thread):
 			nowtime = datetime.datetime.now()
 			c.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" % (nowtime)) # Specify days here
 			rows = c.fetchall()
+			conn.close()
 			dblock.release()
 			for row in rows:
 				urlstr = base64.urlsafe_b64encode(row[1].encode('utf-8')).decode('utf-8')
