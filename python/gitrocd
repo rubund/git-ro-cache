@@ -196,7 +196,10 @@ rm -rf %s/%s/%s.git/cache/%s
 				conn.commit()
 				conn.close()
 				dblock.release()
-			time.sleep(10)
+			for i in range(0,10):
+				if not self.running:
+					break
+				time.sleep(1)
 
 def just_updated(url,reponame,rev):
 	justupdated = False
@@ -224,7 +227,9 @@ class WorkerThread(threading.Thread):
 		if debug:
 			print("WorkerThread started")
 		while self.running:
-			(url,reponame,branch,clientqueue,mode,requestedtime) = q.get()
+			(action,url,reponame,branch,clientqueue,mode,requestedtime) = q.get()
+			if action == 'quit': # Stopping worker thread
+				break
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
 			lock_repo(reponame)
 
@@ -333,7 +338,7 @@ class ClientHandler(threading.Thread):
 						reponame = data['reponame']
 						url = data['url']
 						nowtime = datetime.datetime.now()
-						q.put((url,reponame,branch,clientqueue,mode,nowtime))
+						q.put(('process',url,reponame,branch,clientqueue,mode,nowtime))
 						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
 						requests = requests + 1
 						if debug:
@@ -384,6 +389,7 @@ class ClientHandler(threading.Thread):
 			send_jsondata = json.dumps(send_data)
 			send_msg(self.clientsocket,send_jsondata.encode('utf-8'))
 		self.clientsocket.close()
+		print("stopped client thread")
 		
 
 class ServerThread(threading.Thread):
@@ -404,19 +410,20 @@ class ServerThread(threading.Thread):
 			client_handler.start()
 		self.s.close()
 
-def listen_incoming():
+def listen_incoming(myipaddress):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	getipsock.connect(("gmail.com",80))
-	myipaddress = str(getipsock.getsockname()[0])
-	getipsock.close()
 
 	s.bind((myipaddress,19999))
 	s.listen(10)
 	server_thread = ServerThread(s)
 	server_thread.start()
 	return server_thread
+
+getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+getipsock.connect(("gmail.com",80))
+myipaddress = str(getipsock.getsockname()[0])
+getipsock.close()
 
 
 worker_thread = []
@@ -425,13 +432,31 @@ for i in range(0,10):
 	worker_thread.append(tmp)
 	tmp.start()
 
-server_thread = listen_incoming()
+server_thread = listen_incoming(myipaddress)
 
 cleanup_thread = CleanupThread()
 cleanup_thread.start()
 
 print("gitrocd is running...")
-input("")
-server_thread.join()
+cmd = input("")
+while cmd != 'q' and cmd != 'quit':
+	print("Enter 'q' og 'quit' to quit")
+	cmd = input("")
 
-q.join()
+# Stopping listening thread:
+server_thread.running = False
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((myipaddress,19999))
+s.close()
+
+# Stopping worker threads
+cleanup_thread.running = False
+for w in worker_thread:
+	w.running = False
+	q.put(('quit',None,None,None,None,None,None))
+
+server_thread.join()
+for w in worker_thread:
+	w.join()
+print("Completing cleanup...")
+cleanup_thread.join()
