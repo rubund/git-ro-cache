@@ -464,7 +464,8 @@ def stop_server():
 	clock.release()
 
 	for client in clients_to_wait_for:
-		client.join()
+		if client.is_alive():
+			client.join()
 
 	# Stopping worker threads
 	cleanup_thread.running = False
