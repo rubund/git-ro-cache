@@ -35,6 +35,7 @@ import signal
 debug = False
 
 cachearea = "/tmp/gitrocache"
+dbpath = '/tmp/gitrocd.db'
 os.system("mkdir -p %s" % (cachearea))
 os.system("rm -f %s/locks/*.lock" % (cachearea))
 
@@ -45,8 +46,8 @@ clock = threading.Lock()
 q = queue.Queue()
 glock = threading.Lock()
 
-if not os.path.isfile('/tmp/gitrocd.db'):
-	conn = sqlite3.connect('/tmp/gitrocd.db')
+if not os.path.isfile(dbpath):
+	conn = sqlite3.connect(dbpath)
 	c = conn.cursor()
 	c.execute("""
 CREATE TABLE `gitroc_lastaccess` (
@@ -172,7 +173,7 @@ class CleanupThread(threading.Thread):
 	def run(self):
 		while self.running:
 			dblock.acquire()
-			conn = sqlite3.connect('/tmp/gitrocd.db')
+			conn = sqlite3.connect(dbpath)
 			c = conn.cursor()
 			nowtime = datetime.datetime.now()
 			c.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" % (nowtime)) # Specify days here
@@ -193,7 +194,7 @@ rm -rf %s/%s/%s.git/cache/%s
 
 			if len(rows) > 0:
 				dblock.acquire()
-				conn = sqlite3.connect('/tmp/gitrocd.db')
+				conn = sqlite3.connect(dbpath)
 				c = conn.cursor()
 				for row in rows:
 					query = "delete from gitroc_lastaccess where id=? and git_commit=?"
@@ -209,7 +210,7 @@ rm -rf %s/%s/%s.git/cache/%s
 def just_updated(url,reponame,rev):
 	justupdated = False
 	dblock.acquire()
-	conn = sqlite3.connect('/tmp/gitrocd.db', detect_types=sqlite3.PARSE_DECLTYPES)
+	conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES)
 	c = conn.cursor()
 	nowtime = datetime.datetime.now()
 	c.execute("select id,timestamp from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
@@ -277,7 +278,7 @@ class WorkerThread(threading.Thread):
 				unlock_repo(reponame)
 				if not justupdated:
 					dblock.acquire()
-					conn = sqlite3.connect('/tmp/gitrocd.db')
+					conn = sqlite3.connect(dbpath)
 					c = conn.cursor()
 					nowtime = datetime.datetime.now()
 					c.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
