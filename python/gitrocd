@@ -36,6 +36,7 @@ debug = False
 
 cachearea = "/tmp/gitrocache"
 dbpath = '/tmp/gitrocd.db'
+umask = "027"
 os.system("mkdir -p %s" % (cachearea))
 os.system("rm -f %s/locks/*.lock" % (cachearea))
 
@@ -93,12 +94,13 @@ def unlock_repo(reponame):
 
 def clone_repo(url,urlstr,reponame):
 	command = """
+umask %s
 mkdir -p %s/%s
 cd %s/%s
 git clone --bare %s%s.git
 cd %s.git
 git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
-""" % (cachearea,urlstr,cachearea,urlstr,url,reponame,reponame)
+""" % (umask,cachearea,urlstr,cachearea,urlstr,url,reponame,reponame)
 	if debug:
 		print(command)
 		os.system(command)
@@ -110,9 +112,10 @@ git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
 
 def rev_parse(urlstr,reponame,branch):
 	command = """
+umask %s
 cd %s/%s/%s.git
 git rev-parse %s
-""" % (cachearea,urlstr,reponame,branch)
+""" % (umask,cachearea,urlstr,reponame,branch)
 	if debug:
 		print(command)
 	try:
@@ -123,9 +126,10 @@ git rev-parse %s
 
 def git_fetch(urlstr,reponame):
 	command = """
+umask %s
 cd %s/%s/%s.git
 git fetch --tags --all
-""" % (cachearea,urlstr,reponame)
+""" % (umask,cachearea,urlstr,reponame)
 	if debug:
 		print(command)
 		os.system(command)
@@ -139,10 +143,11 @@ def commit_exists(urlstr,reponame,rev):
 	if debug:
 		print(rev)
 	command = """
+umask %s
 cd %s/%s/%s.git
 git rev-list --all --remotes | grep -q %s
 echo $?
-""" % (cachearea,urlstr,reponame,rev)
+""" % (umask,cachearea,urlstr,reponame,rev)
 	if debug:
 		print(command)
 	missing = int(subprocess.check_output(command, stderr=subprocess.STDOUT,shell=True).decode('utf-8').strip())
@@ -150,12 +155,13 @@ echo $?
 
 def splitout(urlstr,reponame,rev):
 	command = """
+umask %s
 cd %s/%s/%s.git
 mkdir -p cache/%s
 chmod -R u+w cache/%s
 git archive %s | tar -x -C cache/%s
 chmod -R a-w cache/%s
-""" % (cachearea,urlstr,reponame,rev,rev,rev,rev,rev)
+""" % (umask,cachearea,urlstr,reponame,rev,rev,rev,rev,rev)
 	if debug:
 		print(command)
 		os.system(command)
