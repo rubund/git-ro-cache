@@ -44,7 +44,7 @@ clients = []
 clientnum = 0
 clock = threading.Lock()
 
-q = queue.Queue()
+workqueues = []
 glock = threading.Lock()
 
 if not os.path.isfile(dbpath):
@@ -231,15 +231,16 @@ def just_updated(url,reponame,rev):
 	return justupdated
 
 class WorkerThread(threading.Thread):
-	def __init__(self):
+	def __init__(self,q):
 		threading.Thread.__init__(self)
 		self.running = 1
+		self.q = q
 
 	def run(self):
 		if debug:
 			print("WorkerThread started")
 		while self.running:
-			(action,url,reponame,branch,clientqueue,mode,requestedtime) = q.get()
+			(action,url,reponame,branch,clientqueue,mode,requestedtime) = self.q.get()
 			if action == 'quit': # Stopping worker thread
 				break
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
@@ -303,7 +304,7 @@ class WorkerThread(threading.Thread):
 				#send_data['return'] = -1 
 				clientqueue.put((-1,'',reponame,''))
 				unlock_repo(reponame)
-			q.task_done()
+			self.q.task_done()
 			
 
 class ClientHandler(threading.Thread):
@@ -321,6 +322,14 @@ class ClientHandler(threading.Thread):
 		self.num = clientnum
 		clientnum = clientnum + 1
 		clock.release()
+		self.workqueue = -1
+		for j in range(0,len(workqueues)):
+			if workqueues[j].empty():
+				self.workqueue = j
+				break
+		if self.workqueue == -1:
+			self.workqueue = 0
+	
 
 	def run(self):
 		clientqueue = queue.Queue()
@@ -361,7 +370,7 @@ class ClientHandler(threading.Thread):
 						reponame = data['reponame']
 						url = data['url']
 						nowtime = datetime.datetime.now()
-						q.put(('process',url,reponame,branch,clientqueue,mode,nowtime))
+						workqueues[self.workqueue].put(('process',url,reponame,branch,clientqueue,mode,nowtime))
 						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
 						requests = requests + 1
 						if debug:
@@ -478,7 +487,7 @@ def stop_server():
 	cleanup_thread.running = False
 	for w in worker_thread:
 		w.running = False
-		q.put(('quit',None,None,None,None,None,None))
+		w.q.put(('quit',None,None,None,None,None,None))
 
 	server_thread.join()
 	for w in worker_thread:
@@ -501,10 +510,13 @@ getipsock.close()
 
 
 worker_thread = []
-for i in range(0,10):
-	tmp = WorkerThread()
-	worker_thread.append(tmp)
-	tmp.start()
+for i in range(0,4):
+	tmpq = queue.Queue()
+	workqueues.append(tmpq)
+	for j in range(0,10):
+		tmp = WorkerThread(tmpq)
+		worker_thread.append(tmp)
+		tmp.start()
 
 server_thread = listen_incoming(myipaddress)
 
