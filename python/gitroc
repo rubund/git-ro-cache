@@ -67,7 +67,7 @@ def get_symlinks(s,command):
 	if 'symlinks' in recv_jsondata:
 		for symlink in recv_jsondata['symlinks']:
 			if 'symlink'  in symlink:
-				localpath = "ip/%s" % (symlink['reponame'])
+				localpath = "checkedout/%s" % (symlink['reponame'])
 				print(localpath)
 				os.system("""
 mkdir -p %s

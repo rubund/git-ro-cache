@@ -300,7 +300,7 @@ class WorkerThread(threading.Thread):
 					dblock.release()
 
 			except CannotFindError:
-				print("Cannot find the specified IP or revision (%s)" % (reponame))
+				print("Cannot find the specified repository or revision (%s)" % (reponame))
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
 				clientqueue.put((-1,'',reponame,''))
