@@ -344,6 +344,9 @@ class ClientHandler(threading.Thread):
 				jsondata = self.clientsocket.recv(5000)
 			except socket.timeout:
 				continue
+			except socket.error:
+				self.running = False
+				break
 			if not jsondata or not self.running:
 				self.running = False
 				break
