@@ -281,7 +281,7 @@ class WorkerThread(threading.Thread):
 							print("Already exists")
 					else:
 						splitout(urlstr,reponame,rev)
-					clientqueue.put((0,'%s/%s/%s.git/cache/%s' % (cachearea,urlstr,reponame,rev),reponame,rev))
+					clientqueue.put((0,'%s/%s/%s.git/cache/%s' % (cachearea,urlstr,reponame,rev),reponame,branch,rev))
 				print("Done with %s (%s)" % (reponame,rev))
 				unlock_repo(reponame)
 				if not justupdated and action == "process":
@@ -303,7 +303,7 @@ class WorkerThread(threading.Thread):
 				print("Cannot find the specified repository or revision (%s)" % (reponame))
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
-				clientqueue.put((-1,'',reponame,''))
+				clientqueue.put((-1,'',reponame,branch,''))
 				unlock_repo(reponame)
 			self.q.task_done()
 			
@@ -390,12 +390,16 @@ class ClientHandler(threading.Thread):
 						send_data['symlinks'] = []
 						for i in range(sent_so_far,requests):
 							element = {}
-							(returncode,symlink,reponame,rev) = clientqueue.get()
+							(returncode,symlink,reponame,branch,rev) = clientqueue.get()
 							sent_so_far = sent_so_far + 1
+							element['reponame'] = reponame
+							element['branch'] = branch
 							if returncode == 0:
 								element['symlink'] = symlink
-								element['reponame'] = reponame
-								send_data['symlinks'].append(element)
+								element['found'] = 'true'
+							else:
+								element['found'] = 'false'
+							send_data['symlinks'].append(element)
 							clientqueue.task_done()
 						send_data['complete'] = True 
 						send_data['return'] = 0
@@ -407,12 +411,16 @@ class ClientHandler(threading.Thread):
 						for i in range(sent_so_far,requests):
 							element = {}
 							if not clientqueue.empty():
-								(returncode,symlink,reponame,rev) = clientqueue.get()
+								(returncode,symlink,reponame,branch,rev) = clientqueue.get()
 								sent_so_far = sent_so_far + 1
+								element['reponame'] = reponame
+								element['branch'] = branch
 								if returncode == 0:
 									element['symlink'] = symlink
-									element['reponame'] = reponame
-									send_data['symlinks'].append(element)
+									element['found'] = 'true'
+								else:
+									element['found'] = 'false'
+								send_data['symlinks'].append(element)
 								clientqueue.task_done()
 							else:
 								send_data['complete'] = False
