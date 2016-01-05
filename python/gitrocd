@@ -31,6 +31,7 @@ import base64
 import datetime
 import struct
 import signal
+import re
 
 debug = False
 
@@ -160,8 +161,7 @@ cd %s/%s/%s.git
 mkdir -p cache/%s
 chmod -R u+w cache/%s
 git archive %s | tar -x -C cache/%s
-chmod -R a-w cache/%s
-""" % (umask,cachearea,urlstr,reponame,rev,rev,rev,rev,rev)
+""" % (umask,cachearea,urlstr,reponame,rev,rev,rev,rev)
 	if debug:
 		print(command)
 		os.system(command)
@@ -170,6 +170,20 @@ chmod -R a-w cache/%s
 			subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
 		except subprocess.CalledProcessError:
 			return ""
+
+
+	retmain = 0
+	if retmain == 0:
+		command = """
+cd %s/%s/%s.git
+chmod -R a-w cache/%s
+""" % (cachearea,urlstr,reponame,rev)
+	else:  # If failed, delete cache version
+		command = """
+rm -rf %s/%s/%s.git/cache/%s
+""" % (cachearea,urlstr,reponame,rev)
+	os.system(command)
+	return retmain
 
 class CleanupThread(threading.Thread):
 	def __init__(self):
@@ -230,19 +244,7 @@ def just_updated(url,reponame,rev):
 	dblock.release()
 	return justupdated
 
-class WorkerThread(threading.Thread):
-	def __init__(self,q):
-		threading.Thread.__init__(self)
-		self.running = 1
-		self.q = q
-
-	def run(self):
-		if debug:
-			print("WorkerThread started")
-		while self.running:
-			(action,url,reponame,branch,clientqueue,mode,requestedtime) = self.q.get()
-			if action == 'quit': # Stopping worker thread
-				break
+def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath):
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
 			lock_repo(reponame)
 
@@ -277,12 +279,13 @@ class WorkerThread(threading.Thread):
 					raise CannotFindError
 				if action == "process":
 					if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev)):
+						retmain = 0
 						if debug:
 							print("Already exists")
 					else:
-						splitout(urlstr,reponame,rev)
-					clientqueue.put((0,'%s/%s/%s.git/cache/%s' % (cachearea,urlstr,reponame,rev),reponame,branch,rev))
-				print("Done with %s (%s)" % (reponame,rev))
+						retmain = splitout(urlstr,reponame,rev)
+					clientqueue.put((retmain,number,'%s/%s/%s.git/cache/%s%s' % (cachearea,urlstr,reponame,rev,afterpath),reponame,branch,rev))
+				
 				unlock_repo(reponame)
 				if not justupdated and action == "process":
 					dblock.acquire()
@@ -303,8 +306,23 @@ class WorkerThread(threading.Thread):
 				print("Cannot find the specified repository or revision (%s)" % (reponame))
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
-				clientqueue.put((-1,'',reponame,branch,''))
+				clientqueue.put((-1,-1,'',reponame,branch,''))
 				unlock_repo(reponame)
+
+class WorkerThread(threading.Thread):
+	def __init__(self,q):
+		threading.Thread.__init__(self)
+		self.running = 1
+		self.q = q
+
+	def run(self):
+		if debug:
+			print("WorkerThread started")
+		while self.running:
+			(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath) = self.q.get()
+			if action == 'quit': # Stopping worker thread
+				break
+			handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath)
 			self.q.task_done()
 			
 
@@ -370,15 +388,25 @@ class ClientHandler(threading.Thread):
 							raise MissingArgumentError
 						if not 'mode' in data:
 							raise MissingArgumentError
+						if 'number' in data:
+							number = int(data['number'])
+						else:
+							number = -1
 						mode = data['mode']
 						reponame = data['reponame']
 						url = data['url']
 						nowtime = datetime.datetime.now()
+						if 'afterpath' in data:
+							afterpath = data['afterpath']
+							if afterpath[0] != '/':
+								afterpath = "/%s" % (afterpath)
+						else:
+							afterpath = ""
 						if data['command'] == 'checkout':
-							workqueues[self.workqueue].put(('process',url,reponame,branch,clientqueue,mode,nowtime))
+							workqueues[self.workqueue].put((number,'process',url,reponame,branch,clientqueue,mode,nowtime,afterpath))
 							requests = requests + 1
 						elif data['command'] == 'fetchonly':
-							workqueues[self.workqueue].put(('fetchonly',url,reponame,branch,clientqueue,mode,nowtime))
+							workqueues[self.workqueue].put((number,'fetchonly',url,reponame,branch,clientqueue,mode,nowtime,afterpath))
 						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
 						if debug:
 							print("requests: %d" % requests)
@@ -390,8 +418,10 @@ class ClientHandler(threading.Thread):
 						send_data['symlinks'] = []
 						for i in range(sent_so_far,requests):
 							element = {}
-							(returncode,symlink,reponame,branch,rev) = clientqueue.get()
+							(returncode,number,symlink,reponame,branch,rev) = clientqueue.get()
 							sent_so_far = sent_so_far + 1
+							if number != -1:
+								element['number'] = number
 							element['reponame'] = reponame
 							element['branch'] = branch
 							if returncode == 0:
@@ -411,8 +441,10 @@ class ClientHandler(threading.Thread):
 						for i in range(sent_so_far,requests):
 							element = {}
 							if not clientqueue.empty():
-								(returncode,symlink,reponame,branch,rev) = clientqueue.get()
+								(returncode,number,symlink,reponame,branch,rev) = clientqueue.get()
 								sent_so_far = sent_so_far + 1
+								if number != -1:
+									element['number'] = number
 								element['reponame'] = reponame
 								element['branch'] = branch
 								if returncode == 0:
@@ -502,7 +534,7 @@ def stop_server():
 	cleanup_thread.running = False
 	for w in worker_thread:
 		w.running = False
-		w.q.put(('quit',None,None,None,None,None,None))
+		w.q.put((-1,'quit',None,None,None,None,None,None,None))
 
 	server_thread.join()
 	for w in worker_thread:
