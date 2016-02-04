@@ -407,7 +407,7 @@ class ClientHandler(threading.Thread):
 						nowtime = datetime.datetime.now()
 						if 'afterpath' in data:
 							afterpath = data['afterpath']
-							if afterpath[0] != '/':
+							if len(afterpath) > 0 and  afterpath[0] != '/':
 								afterpath = "/%s" % (afterpath)
 						else:
 							afterpath = ""
