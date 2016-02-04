@@ -73,8 +73,17 @@ class CannotFindError(BaseException):
 		""
 
 def send_msg(sock, msg):
-	msg = struct.pack('>I', len(msg)) + msg
-	sock.send(msg)
+	msg = struct.pack('>I', len(msg)) + msg 
+	partsize = 1000
+	n = 0
+	while len(msg) > n:
+		if len(msg) > n+partsize:
+			thissize = partsize
+		else:
+			thissize = len(msg) - n
+		part = msg[n:n+thissize]
+		n = n+thissize
+		sock.send(part)
 
 def lock_repo(reponame):
 	available = False
