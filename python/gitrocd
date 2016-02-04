@@ -315,7 +315,7 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 				print("Cannot find the specified repository or revision (%s)" % (reponame))
 				#send_data['error'] = 'Not found'
 				#send_data['return'] = -1 
-				clientqueue.put((-1,-1,'',reponame,branch,''))
+				clientqueue.put((-1,number,'',reponame,branch,''))
 				unlock_repo(reponame)
 
 class WorkerThread(threading.Thread):

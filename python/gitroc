@@ -28,6 +28,8 @@ import time
 import json
 import struct
 
+number = 0
+
 def recv_msg(sock):
 	raw_msglen = sock.recv(4)
 	if not raw_msglen:
@@ -45,15 +47,18 @@ def recvall(sock, n):
 	return data
 
 def get_one(s,reponame,url='gitolite3@nuc:',branch='master'):
+	global number;
 	data = {}
 	data['command'] = 'checkout'
 	data['reponame'] = reponame
 	data['url'] = url
 	data['commit'] = branch 
 	data['mode'] = 0
+	data['number'] = number
 	jsondata = json.dumps(data)
 	s.send(jsondata.encode('utf-8'))
 	resp = recv_msg(s)
+	number = number + 1
 
 def get_symlinks(s,command):
 	data = {}
