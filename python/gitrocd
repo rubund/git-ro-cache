@@ -120,6 +120,18 @@ git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
 		except subprocess.CalledProcessError:
 			return ""
 
+def is_empty_repo(urlstr,reponame):
+	command = """
+cd %s/%s/%s.git
+git show-ref > /dev/null
+"""  % (cachearea,urlstr,reponame)
+	try:
+		subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+	except subprocess.CalledProcessError:
+		return 1  # Empty git repo
+	return 0
+
+
 def rev_parse(urlstr,reponame,branch):
 	command = """
 umask %s
@@ -262,6 +274,12 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 					clone_repo(url,urlstr,reponame)
 					if(not os.path.isdir("%s/%s/%s.git" % (cachearea,urlstr,reponame))):
 						raise CannotFindError
+
+				if is_empty_repo(urlstr,reponame):
+					os.system("mkdir -p %s/%s/%s.git/cache/empty" % (cachearea,urlstr,reponame))
+					clientqueue.put((-6,number,'%s/%s/%s.git/cache/empty' % (cachearea,urlstr,reponame),reponame,"empty","empty"))
+					unlock_repo(reponame)
+					return
 
 				rev = rev_parse(urlstr,reponame,branch)
 				if debug:
@@ -433,7 +451,7 @@ class ClientHandler(threading.Thread):
 								element['number'] = number
 							element['reponame'] = reponame
 							element['branch'] = branch
-							if returncode == 0:
+							if returncode == 0 or returncode == -6:
 								element['symlink'] = symlink
 								element['found'] = 'true'
 							else:
@@ -456,7 +474,7 @@ class ClientHandler(threading.Thread):
 									element['number'] = number
 								element['reponame'] = reponame
 								element['branch'] = branch
-								if returncode == 0:
+								if returncode == 0 or returncode == -6:
 									element['symlink'] = symlink
 									element['found'] = 'true'
 								else:
