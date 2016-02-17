@@ -276,10 +276,12 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 						raise CannotFindError
 
 				if is_empty_repo(urlstr,reponame):
-					os.system("mkdir -p %s/%s/%s.git/cache/empty" % (cachearea,urlstr,reponame))
-					clientqueue.put((-6,number,'%s/%s/%s.git/cache/empty' % (cachearea,urlstr,reponame),reponame,"empty","empty"))
-					unlock_repo(reponame)
-					return
+					git_fetch(urlstr,reponame)
+					if is_empty_repo(urlstr,reponame):
+						os.system("mkdir -p %s/%s/%s.git/cache/empty" % (cachearea,urlstr,reponame))
+						clientqueue.put((-6,number,'%s/%s/%s.git/cache/empty' % (cachearea,urlstr,reponame),reponame,"empty","empty"))
+						unlock_repo(reponame)
+						return
 
 				rev = rev_parse(urlstr,reponame,branch)
 				if debug:
@@ -451,6 +453,7 @@ class ClientHandler(threading.Thread):
 								element['number'] = number
 							element['reponame'] = reponame
 							element['branch'] = branch
+							element['returncode'] = returncode
 							if returncode == 0 or returncode == -6:
 								element['symlink'] = symlink
 								element['found'] = 'true'
@@ -474,6 +477,7 @@ class ClientHandler(threading.Thread):
 									element['number'] = number
 								element['reponame'] = reponame
 								element['branch'] = branch
+								element['returncode'] = returncode
 								if returncode == 0 or returncode == -6:
 									element['symlink'] = symlink
 									element['found'] = 'true'
