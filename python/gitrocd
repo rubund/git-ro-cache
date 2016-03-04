@@ -48,10 +48,11 @@ clock = threading.Lock()
 workqueues = []
 glock = threading.Lock()
 
+conn = sqlite3.connect(dbpath,detect_types=sqlite3.PARSE_DECLTYPES,check_same_thread=False)
+cursor = conn.cursor()
+
 if not os.path.isfile(dbpath):
-	conn = sqlite3.connect(dbpath)
-	c = conn.cursor()
-	c.execute("""
+	cursor.execute("""
 CREATE TABLE `gitroc_lastaccess` (
   `id` INTEGER PRIMARY KEY,
   `timestamp` timestamp ,
@@ -61,7 +62,6 @@ CREATE TABLE `gitroc_lastaccess` (
 );
 """)
 	conn.commit()
-	conn.close()
 
 dblock = threading.Lock()
 
@@ -214,12 +214,10 @@ class CleanupThread(threading.Thread):
 	def run(self):
 		while self.running:
 			dblock.acquire()
-			conn = sqlite3.connect(dbpath)
-			c = conn.cursor()
+			check_if_db_open()
 			nowtime = datetime.datetime.now()
-			c.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" % (nowtime)) # Specify days here
-			rows = c.fetchall()
-			conn.close()
+			cursor.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" % (nowtime)) # Specify days here
+			rows = cursor.fetchall()
 			dblock.release()
 			for row in rows:
 				urlstr = base64.urlsafe_b64encode(row[1].encode('utf-8')).decode('utf-8')
@@ -235,13 +233,11 @@ rm -rf %s/%s/%s.git/cache/%s
 
 			if len(rows) > 0:
 				dblock.acquire()
-				conn = sqlite3.connect(dbpath)
-				c = conn.cursor()
+				check_if_db_open()
 				for row in rows:
 					query = "delete from gitroc_lastaccess where id=? and git_commit=?"
-					c.execute(query,(row[0],row[3]))
+					cursor.execute(query,(row[0],row[3]))
 				conn.commit()
-				conn.close()
 				dblock.release()
 			for i in range(0,10):
 				if not self.running:
@@ -251,19 +247,27 @@ rm -rf %s/%s/%s.git/cache/%s
 def just_updated(url,reponame,rev):
 	justupdated = False
 	dblock.acquire()
-	conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES)
-	c = conn.cursor()
+	check_if_db_open()
 	nowtime = datetime.datetime.now()
-	c.execute("select id,timestamp from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
-	row = c.fetchone()
+	cursor.execute("select id,timestamp from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
+	row = cursor.fetchone()
 	if row:
 		timestamp = row[1]
 		if(timestamp > nowtime-datetime.timedelta(seconds=10)):
 			print("Just updated (%s)" % (reponame))
 			justupdated = True
-	conn.close()
 	dblock.release()
 	return justupdated
+
+def check_if_db_open():
+	global conn
+	global cursor
+	try:
+		cursor.execute("select 1 from gitroc_lastaccess")
+	except sqlite3.ProgrammingError as e:
+		print(e)
+		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+		cursor = conn.cursor()
 
 def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath):
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
@@ -318,17 +322,15 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 				unlock_repo(reponame)
 				if not justupdated and action == "process":
 					dblock.acquire()
-					conn = sqlite3.connect(dbpath)
-					c = conn.cursor()
+					check_if_db_open()
 					nowtime = datetime.datetime.now()
-					c.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
-					row = c.fetchone()
+					cursor.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
+					row = cursor.fetchone()
 					if row != None: 
-						c.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
+						cursor.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
 					else:
-						c.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
+						cursor.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
 					conn.commit()
-					conn.close()
 					dblock.release()
 
 			except CannotFindError:
@@ -572,6 +574,7 @@ def stop_server():
 		w.join()
 	print("Completing cleanup...")
 	cleanup_thread.join()
+	conn.close()
 
 def signal_handler(signal,frame):
 	global running
