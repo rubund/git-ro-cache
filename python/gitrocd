@@ -48,10 +48,13 @@ clock = threading.Lock()
 workqueues = []
 glock = threading.Lock()
 
+dbexists = False
+if os.path.isfile(dbpath):
+	dbexists = True
 conn = sqlite3.connect(dbpath,detect_types=sqlite3.PARSE_DECLTYPES,check_same_thread=False)
 cursor = conn.cursor()
 
-if not os.path.isfile(dbpath):
+if not dbexists:
 	cursor.execute("""
 CREATE TABLE `gitroc_lastaccess` (
   `id` INTEGER PRIMARY KEY,
