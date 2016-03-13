@@ -144,7 +144,7 @@ git rev-parse %s
 	if debug:
 		print(command)
 	try:
-		rev = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()
+		rev = subprocess.check_output(command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
 	except subprocess.CalledProcessError:
 		return ""
 	return rev
@@ -294,12 +294,17 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 				if debug:
 					print(rev)
 				justupdated = False 
-				if rev == branch:
+				if rev == branch:  # Commit id has been specified directly
 					if commit_exists(urlstr,reponame,rev) == 0:
 						git_fetch(urlstr,reponame)
 						if commit_exists(urlstr,reponame,rev) == 0:
 							raise CannotFindError
-				else:
+				elif rev == "":    # Cannot find reference, maybe needs fetch
+					git_fetch(urlstr,reponame)
+					rev = rev_parse(urlstr,reponame,branch)
+					if rev == "":
+						raise CannotFindError
+				else:              # Has found reference, but maybe needs to update
 					if (mode != 1 and 'tags/' not in branch) or action == "fetchonly":
 						justupdated =just_updated(url,reponame,rev)
 						if not justupdated or action == "fetchonly":
