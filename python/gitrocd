@@ -54,8 +54,10 @@ if os.path.isfile(dbpath):
 conn = sqlite3.connect(dbpath,detect_types=sqlite3.PARSE_DECLTYPES,check_same_thread=False)
 cursor = conn.cursor()
 
+r = False
 if not dbexists:
-	cursor.execute("""
+	while not r:
+		cursor.execute("""
 CREATE TABLE `gitroc_lastaccess` (
   `id` INTEGER PRIMARY KEY,
   `timestamp` timestamp ,
@@ -64,7 +66,7 @@ CREATE TABLE `gitroc_lastaccess` (
   `git_commit` varchar(256)
 );
 """)
-	conn.commit()
+		r = conn_commit_safe()
 
 dblock = threading.Lock()
 
@@ -237,10 +239,12 @@ rm -rf %s/%s/%s.git/cache/%s
 			if len(rows) > 0:
 				dblock.acquire()
 				check_if_db_open()
-				for row in rows:
-					query = "delete from gitroc_lastaccess where id=? and git_commit=?"
-					cursor.execute(query,(row[0],row[3]))
-				conn.commit()
+				r = False
+				while not r:
+					for row in rows:
+						query = "delete from gitroc_lastaccess where id=? and git_commit=?"
+						cursor.execute(query,(row[0],row[3]))
+					r = conn_commit_safe()
 				dblock.release()
 			for i in range(0,10):
 				if not self.running:
@@ -271,6 +275,18 @@ def check_if_db_open():
 		print(e)
 		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
 		cursor = conn.cursor()
+
+def conn_commit_safe():
+	global conn
+	global cursor
+	try:
+		conn.commit()
+		return True
+	except sqlite3.OperationalError as e:
+		print(e)
+		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+		cursor = conn.cursor()
+		return False
 
 def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath):
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
@@ -334,11 +350,13 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 					nowtime = datetime.datetime.now()
 					cursor.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
 					row = cursor.fetchone()
-					if row != None: 
-						cursor.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
-					else:
-						cursor.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
-					conn.commit()
+					r = False
+					while not r:
+						if row != None: 
+							cursor.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
+						else:
+							cursor.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
+						r = conn_commit_safe()
 					dblock.release()
 
 			except CannotFindError:
