@@ -54,6 +54,19 @@ if os.path.isfile(dbpath):
 conn = sqlite3.connect(dbpath,detect_types=sqlite3.PARSE_DECLTYPES,check_same_thread=False)
 cursor = conn.cursor()
 
+def conn_commit_safe():
+	global conn
+	global cursor
+	try:
+		conn.commit()
+		return True
+	except sqlite3.OperationalError as e:
+		print(e)
+		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+		cursor = conn.cursor()
+		return False
+
+
 r = False
 if not dbexists:
 	while not r:
@@ -275,18 +288,6 @@ def check_if_db_open():
 		print(e)
 		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
 		cursor = conn.cursor()
-
-def conn_commit_safe():
-	global conn
-	global cursor
-	try:
-		conn.commit()
-		return True
-	except sqlite3.OperationalError as e:
-		print(e)
-		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
-		cursor = conn.cursor()
-		return False
 
 def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath):
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
