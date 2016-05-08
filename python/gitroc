@@ -46,7 +46,7 @@ def recvall(sock, n):
 		data += packet.decode('utf-8')
 	return data
 
-def get_one(s,reponame,url='gitolite3@nuc:',branch='master'):
+def get_one(s,reponame,url,branch='master'):
 	global number;
 	data = {}
 	data['command'] = 'checkout'
@@ -68,7 +68,6 @@ def get_symlinks(s,command):
 
 	resp = recv_msg(s)
 	recv_jsondata = json.loads(resp)
-	#print(recv_jsondata)
 	if 'symlinks' in recv_jsondata:
 		for symlink in recv_jsondata['symlinks']:
 			if 'symlink'  in symlink:
@@ -90,8 +89,7 @@ def send_message(jsondata=''):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	s.connect((myipaddress,19999))
 
-	get_one(s,'testdevel',branch='06e7ee15b1af2c4886e55db4b76b9aead31ed62a')
-	get_one(s,'auroranotifier-server')
+	get_one(s,'my-repo.git',url='git@github.com',branch='master')
 
 	status = False
 	while status == False:
@@ -108,14 +106,6 @@ def send_message(jsondata=''):
 
 
 
-
-#if len(sys.argv) < 2:
-#	print("Missing arguments")
-#	sys.exit(-1)
-#elif len(sys.argv) == 2:
-#	branch = "master"
-#else:
-#	branch = sys.argv[2]
 
 send_message()
 
