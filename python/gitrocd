@@ -289,7 +289,7 @@ def check_if_db_open():
 		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
 		cursor = conn.cursor()
 
-def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath):
+def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath,regenerate_cache_entry=False):
 			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
 			lock_repo(reponame)
 
@@ -335,6 +335,24 @@ def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,
 
 				if rev == "":
 					raise CannotFindError
+
+				if regenerate_cache_entry:
+					if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev)):
+						os.system("chmod -R u+w %s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev))
+						os.system("rm -rf %s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev))
+
+					dblock.acquire()
+					check_if_db_open()
+					cursor.execute("select id from gitroc_lastaccess where git_commit=? and git_reponame=?",(rev,reponame))
+					rows = cursor.fetchall()
+					r = False
+					while not r:
+						for row in rows:
+							query = "delete from gitroc_lastaccess where id=?"
+							cursor.execute(query,(row[0],))
+						r = conn_commit_safe()
+					dblock.release()
+
 				if action == "process":
 					if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev)):
 						retmain = 0
