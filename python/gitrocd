@@ -162,6 +162,28 @@ git rev-parse %s
 		rev = subprocess.check_output(command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
 	except subprocess.CalledProcessError:
 		return ""
+
+	if rev == branch:
+		command = """
+cd %s/%s/%s.git
+git cat-file -p %s
+""" % (cachearea,urlstr,reponame,branch)
+		istag = False
+		commitrev = ""
+		try:
+			catfile = subprocess.check_output(command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
+			lines = catfile.split('\n')
+			for l in lines:
+				if l[0:6] == 'object':
+					splitted = l.split()
+					if splitted != None and len(splitted) >= 2:
+						commitrev = splitted[1]
+				elif l[0:3] == 'tag':
+					istag = True
+		except subprocess.CalledProcessError:
+			commitrev = branch
+		if istag and commitrev != "":
+			rev = commitrev
 	return rev
 
 def git_fetch(urlstr,reponame):
