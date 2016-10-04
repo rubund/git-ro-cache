@@ -50,27 +50,30 @@ glock = threading.Lock()
 
 dbexists = False
 if os.path.isfile(dbpath):
-	dbexists = True
-conn = sqlite3.connect(dbpath,detect_types=sqlite3.PARSE_DECLTYPES,check_same_thread=False)
+    dbexists = True
+conn = sqlite3.connect(
+    dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
 cursor = conn.cursor()
 
+
 def conn_commit_safe():
-	global conn
-	global cursor
-	try:
-		conn.commit()
-		return True
-	except sqlite3.OperationalError as e:
-		print(e)
-		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
-		cursor = conn.cursor()
-		return False
+    global conn
+    global cursor
+    try:
+        conn.commit()
+        return True
+    except sqlite3.OperationalError as e:
+        print(e)
+        conn = sqlite3.connect(
+            dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+        cursor = conn.cursor()
+        return False
 
 
 r = False
 if not dbexists:
-	while not r:
-		cursor.execute("""
+    while not r:
+        cursor.execute("""
 CREATE TABLE `gitroc_lastaccess` (
   `id` INTEGER PRIMARY KEY,
   `timestamp` timestamp ,
@@ -79,592 +82,641 @@ CREATE TABLE `gitroc_lastaccess` (
   `git_commit` varchar(256)
 );
 """)
-		r = conn_commit_safe()
+        r = conn_commit_safe()
 
 dblock = threading.Lock()
 
+
 class MissingArgumentError(BaseException):
-	def __init(self):
-		""
+
+    def __init(self):
+        ""
+
+
 class CannotFindError(BaseException):
-	def __init(self):
-		""
+
+    def __init(self):
+        ""
+
 
 def send_msg(sock, msg):
-	msg = struct.pack('>I', len(msg)) + msg 
-	partsize = 1000
-	n = 0
-	while len(msg) > n:
-		if len(msg) > n+partsize:
-			thissize = partsize
-		else:
-			thissize = len(msg) - n
-		part = msg[n:n+thissize]
-		n = n+thissize
-		sock.send(part)
+    msg = struct.pack('>I', len(msg)) + msg
+    partsize = 1000
+    n = 0
+    while len(msg) > n:
+        if len(msg) > n + partsize:
+            thissize = partsize
+        else:
+            thissize = len(msg) - n
+        part = msg[n:n + thissize]
+        n = n + thissize
+        sock.send(part)
+
 
 def lock_repo(reponame):
-	available = False
-	while not available:
-		glock.acquire()
-		if not os.path.isfile("%s/locks/%s.lock" % (cachearea,reponame)):
-			available = True
-			os.system("mkdir -p %s/locks && touch %s/locks/%s.lock" % (cachearea,cachearea,reponame))
-			glock.release()
-			break
-		glock.release()
-		time.sleep(0.1)
+    available = False
+    while not available:
+        glock.acquire()
+        if not os.path.isfile("%s/locks/%s.lock" % (cachearea, reponame)):
+            available = True
+            os.system("mkdir -p %s/locks && touch %s/locks/%s.lock" %
+                      (cachearea, cachearea, reponame))
+            glock.release()
+            break
+        glock.release()
+        time.sleep(0.1)
+
 
 def unlock_repo(reponame):
-	glock.acquire()
-	os.system("rm -f %s/locks/%s.lock" % (cachearea,reponame))
-	glock.release()
+    glock.acquire()
+    os.system("rm -f %s/locks/%s.lock" % (cachearea, reponame))
+    glock.release()
 
-def clone_repo(url,urlstr,reponame):
-	command = """
+
+def clone_repo(url, urlstr, reponame):
+    command = """
 umask %s
 mkdir -p %s/%s
 cd %s/%s
 git clone --bare %s%s.git
 cd %s.git
 git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
-""" % (umask,cachearea,urlstr,cachearea,urlstr,url,reponame,reponame)
-	if debug:
-		print(command)
-		os.system(command)
-	else:
-		try:
-			subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-		except subprocess.CalledProcessError:
-			return ""
+""" % (umask, cachearea, urlstr, cachearea, urlstr, url, reponame, reponame)
+    if debug:
+        print(command)
+        os.system(command)
+    else:
+        try:
+            subprocess.check_output(
+                command, stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError:
+            return ""
 
-def is_empty_repo(urlstr,reponame):
-	command = """
+
+def is_empty_repo(urlstr, reponame):
+    command = """
 cd %s/%s/%s.git
 git show-ref > /dev/null
-"""  % (cachearea,urlstr,reponame)
-	try:
-		subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-	except subprocess.CalledProcessError:
-		return 1  # Empty git repo
-	return 0
+"""  % (cachearea, urlstr, reponame)
+    try:
+        subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+    except subprocess.CalledProcessError:
+        return 1  # Empty git repo
+    return 0
 
 
-def rev_parse(urlstr,reponame,branch):
-	command = """
+def rev_parse(urlstr, reponame, branch):
+    command = """
 umask %s
 cd %s/%s/%s.git
 git rev-parse %s
-""" % (umask,cachearea,urlstr,reponame,branch)
-	if debug:
-		print(command)
-	try:
-		rev = subprocess.check_output(command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
-	except subprocess.CalledProcessError:
-		return ""
+""" % (umask, cachearea, urlstr, reponame, branch)
+    if debug:
+        print(command)
+    try:
+        rev = subprocess.check_output(
+            command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
+    except subprocess.CalledProcessError:
+        return ""
 
-	if rev == branch:
-		command = """
+    if rev == branch:
+        command = """
 cd %s/%s/%s.git
 git cat-file -p %s
-""" % (cachearea,urlstr,reponame,branch)
-		istag = False
-		commitrev = ""
-		try:
-			catfile = subprocess.check_output(command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
-			lines = catfile.split('\n')
-			for l in lines:
-				if l[0:6] == 'object':
-					splitted = l.split()
-					if splitted != None and len(splitted) >= 2:
-						commitrev = splitted[1]
-				elif l[0:3] == 'tag':
-					istag = True
-		except subprocess.CalledProcessError:
-			commitrev = branch
-		if istag and commitrev != "":
-			rev = commitrev
-	return rev
+""" % (cachearea, urlstr, reponame, branch)
+        istag = False
+        commitrev = ""
+        try:
+            catfile = subprocess.check_output(
+                command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
+            lines = catfile.split('\n')
+            for l in lines:
+                if l[0:6] == 'object':
+                    splitted = l.split()
+                    if splitted != None and len(splitted) >= 2:
+                        commitrev = splitted[1]
+                elif l[0:3] == 'tag':
+                    istag = True
+        except subprocess.CalledProcessError:
+            commitrev = branch
+        if istag and commitrev != "":
+            rev = commitrev
+    return rev
 
-def git_fetch(urlstr,reponame):
-	command = """
+
+def git_fetch(urlstr, reponame):
+    command = """
 umask %s
 cd %s/%s/%s.git
 git fetch --tags --all
-""" % (umask,cachearea,urlstr,reponame)
-	if debug:
-		print(command)
-		os.system(command)
-	else:
-		try:
-			subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-		except subprocess.CalledProcessError:
-			return ""
+""" % (umask, cachearea, urlstr, reponame)
+    if debug:
+        print(command)
+        os.system(command)
+    else:
+        try:
+            subprocess.check_output(
+                command, stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError:
+            return ""
 
-def commit_exists(urlstr,reponame,rev):
-	if debug:
-		print(rev)
-	command = """
+
+def commit_exists(urlstr, reponame, rev):
+    if debug:
+        print(rev)
+    command = """
 umask %s
 cd %s/%s/%s.git
 git rev-list --all --remotes | grep -q %s
 echo $?
-""" % (umask,cachearea,urlstr,reponame,rev)
-	if debug:
-		print(command)
-	missing = int(subprocess.check_output(command, stderr=subprocess.STDOUT,shell=True).decode('utf-8').strip())
-	return not missing
+""" % (umask, cachearea, urlstr, reponame, rev)
+    if debug:
+        print(command)
+    missing = int(subprocess.check_output(
+        command, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip())
+    return not missing
 
-def splitout(urlstr,reponame,rev):
-	command = """
+
+def splitout(urlstr, reponame, rev):
+    command = """
 umask %s
 cd %s/%s/%s.git
 mkdir -p cache/%s
 chmod -R u+w cache/%s
 git archive %s | tar -x -C cache/%s
-""" % (umask,cachearea,urlstr,reponame,rev,rev,rev,rev)
-	if debug:
-		print(command)
-		os.system(command)
-	else:
-		try:
-			subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-		except subprocess.CalledProcessError:
-			return ""
+""" % (umask, cachearea, urlstr, reponame, rev, rev, rev, rev)
+    if debug:
+        print(command)
+        os.system(command)
+    else:
+        try:
+            subprocess.check_output(
+                command, stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError:
+            return ""
 
-
-	retmain = 0
-	if retmain == 0:
-		command = """
+    retmain = 0
+    if retmain == 0:
+        command = """
 cd %s/%s/%s.git
 chmod -R a-w cache/%s
-""" % (cachearea,urlstr,reponame,rev)
-	else:  # If failed, delete cache version
-		command = """
+""" % (cachearea, urlstr, reponame, rev)
+    else:  # If failed, delete cache version
+        command = """
 rm -rf %s/%s/%s.git/cache/%s
-""" % (cachearea,urlstr,reponame,rev)
-	os.system(command)
-	return retmain
+""" % (cachearea, urlstr, reponame, rev)
+    os.system(command)
+    return retmain
+
 
 class CleanupThread(threading.Thread):
-	def __init__(self):
-		threading.Thread.__init__(self)
-		self.running = 1
 
-	def run(self):
-		while self.running:
-			dblock.acquire()
-			check_if_db_open()
-			nowtime = datetime.datetime.now()
-			cursor.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" % (nowtime)) # Specify days here
-			rows = cursor.fetchall()
-			dblock.release()
-			for row in rows:
-				urlstr = base64.urlsafe_b64encode(row[1].encode('utf-8')).decode('utf-8')
-				lock_repo(row[2])
-				command = """
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.running = 1
+
+    def run(self):
+        while self.running:
+            dblock.acquire()
+            check_if_db_open()
+            nowtime = datetime.datetime.now()
+            cursor.execute("select id,git_url,git_reponame,git_commit,timestamp from gitroc_lastaccess where julianday(timestamp) < (julianday('%s') - 30)" %
+                           (nowtime))  # Specify days here
+            rows = cursor.fetchall()
+            dblock.release()
+            for row in rows:
+                urlstr = base64.urlsafe_b64encode(
+                    row[1].encode('utf-8')).decode('utf-8')
+                lock_repo(row[2])
+                command = """
 chmod -R u+w %s/%s/%s.git/cache/%s
 rm -rf %s/%s/%s.git/cache/%s
-""" % (cachearea,urlstr,row[2],row[3],cachearea,urlstr,row[2],row[3])
-				print(command)
-				os.system(command)
-				unlock_repo(row[2])
+""" % (cachearea, urlstr, row[2], row[3], cachearea, urlstr, row[2], row[3])
+                print(command)
+                os.system(command)
+                unlock_repo(row[2])
+
+            if len(rows) > 0:
+                dblock.acquire()
+                check_if_db_open()
+                r = False
+                while not r:
+                    for row in rows:
+                        query = "delete from gitroc_lastaccess where id=? and git_commit=?"
+                        cursor.execute(query, (row[0], row[3]))
+                    r = conn_commit_safe()
+                dblock.release()
+            for i in range(0, 10):
+                if not self.running:
+                    break
+                time.sleep(1)
 
 
-			if len(rows) > 0:
-				dblock.acquire()
-				check_if_db_open()
-				r = False
-				while not r:
-					for row in rows:
-						query = "delete from gitroc_lastaccess where id=? and git_commit=?"
-						cursor.execute(query,(row[0],row[3]))
-					r = conn_commit_safe()
-				dblock.release()
-			for i in range(0,10):
-				if not self.running:
-					break
-				time.sleep(1)
+def just_updated(url, reponame, rev):
+    justupdated = False
+    dblock.acquire()
+    check_if_db_open()
+    nowtime = datetime.datetime.now()
+    cursor.execute(
+        "select id,timestamp from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame, rev, url))
+    row = cursor.fetchone()
+    if row:
+        timestamp = row[1]
+        if(timestamp > nowtime - datetime.timedelta(seconds=10)):
+            print("Just updated (%s)" % (reponame))
+            justupdated = True
+    dblock.release()
+    return justupdated
 
-def just_updated(url,reponame,rev):
-	justupdated = False
-	dblock.acquire()
-	check_if_db_open()
-	nowtime = datetime.datetime.now()
-	cursor.execute("select id,timestamp from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
-	row = cursor.fetchone()
-	if row:
-		timestamp = row[1]
-		if(timestamp > nowtime-datetime.timedelta(seconds=10)):
-			print("Just updated (%s)" % (reponame))
-			justupdated = True
-	dblock.release()
-	return justupdated
 
 def check_if_db_open():
-	global conn
-	global cursor
-	try:
-		cursor.execute("select 1 from gitroc_lastaccess")
-	except sqlite3.ProgrammingError as e:
-		print(e)
-		conn = sqlite3.connect(dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
-		cursor = conn.cursor()
+    global conn
+    global cursor
+    try:
+        cursor.execute("select 1 from gitroc_lastaccess")
+    except sqlite3.ProgrammingError as e:
+        print(e)
+        conn = sqlite3.connect(
+            dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+        cursor = conn.cursor()
 
-def handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath,regenerate_cache_entry=False):
-			urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
-			lock_repo(reponame)
 
-			try:
-				if not os.path.isdir("%s/%s/%s.git" % (cachearea,urlstr,reponame)):
-					clone_repo(url,urlstr,reponame)
-					if(not os.path.isdir("%s/%s/%s.git" % (cachearea,urlstr,reponame))):
-						raise CannotFindError
+def handle_one(number, action, url, reponame, branch, clientqueue, mode, requestedtime, afterpath, regenerate_cache_entry=False):
+    urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
+    lock_repo(reponame)
 
-				if is_empty_repo(urlstr,reponame):
-					git_fetch(urlstr,reponame)
-					if is_empty_repo(urlstr,reponame):
-						os.system("mkdir -p %s/%s/%s.git/cache/empty" % (cachearea,urlstr,reponame))
-						clientqueue.put((-6,number,'%s/%s/%s.git/cache/empty' % (cachearea,urlstr,reponame),reponame,"empty","empty"))
-						unlock_repo(reponame)
-						return
+    try:
+        if not os.path.isdir("%s/%s/%s.git" % (cachearea, urlstr, reponame)):
+            clone_repo(url, urlstr, reponame)
+            if(not os.path.isdir("%s/%s/%s.git" % (cachearea, urlstr, reponame))):
+                raise CannotFindError
 
-				rev = rev_parse(urlstr,reponame,branch)
-				if debug:
-					print(rev)
-				justupdated = False 
-				if rev == branch:  # Commit id has been specified directly
-					if commit_exists(urlstr,reponame,rev) == 0:
-						git_fetch(urlstr,reponame)
-						if commit_exists(urlstr,reponame,rev) == 0:
-							raise CannotFindError
-				elif rev == "":    # Cannot find reference, maybe needs fetch
-					git_fetch(urlstr,reponame)
-					rev = rev_parse(urlstr,reponame,branch)
-					if rev == "":
-						raise CannotFindError
-				else:              # Has found reference, but maybe needs to update
-					if (mode != 1 and 'tags/' not in branch) or action == "fetchonly":
-						justupdated =just_updated(url,reponame,rev)
-						if not justupdated or action == "fetchonly":
-							git_fetch(urlstr,reponame)
-					rev = rev_parse(urlstr,reponame,branch)
-					if rev == "":
-						raise CannotFindError
+        if is_empty_repo(urlstr, reponame):
+            git_fetch(urlstr, reponame)
+            if is_empty_repo(urlstr, reponame):
+                os.system("mkdir -p %s/%s/%s.git/cache/empty" %
+                          (cachearea, urlstr, reponame))
+                clientqueue.put((-6, number, '%s/%s/%s.git/cache/empty' %
+                                (cachearea, urlstr, reponame), reponame, "empty", "empty"))
+                unlock_repo(reponame)
+                return
 
-				if debug:
-					print(rev)
+        rev = rev_parse(urlstr, reponame, branch)
+        if debug:
+            print(rev)
+        justupdated = False
+        if rev == branch:  # Commit id has been specified directly
+            if commit_exists(urlstr, reponame, rev) == 0:
+                git_fetch(urlstr, reponame)
+                if commit_exists(urlstr, reponame, rev) == 0:
+                    raise CannotFindError
+        elif rev == "":    # Cannot find reference, maybe needs fetch
+            git_fetch(urlstr, reponame)
+            rev = rev_parse(urlstr, reponame, branch)
+            if rev == "":
+                raise CannotFindError
+        else:              # Has found reference, but maybe needs to update
+            if (mode != 1 and 'tags/' not in branch) or action == "fetchonly":
+                justupdated = just_updated(url, reponame, rev)
+                if not justupdated or action == "fetchonly":
+                    git_fetch(urlstr, reponame)
+            rev = rev_parse(urlstr, reponame, branch)
+            if rev == "":
+                raise CannotFindError
 
-				if rev == "":
-					raise CannotFindError
+        if debug:
+            print(rev)
 
-				if regenerate_cache_entry:
-					if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev)):
-						os.system("chmod -R u+w %s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev))
-						os.system("rm -rf %s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev))
+        if rev == "":
+            raise CannotFindError
 
-					dblock.acquire()
-					check_if_db_open()
-					cursor.execute("select id from gitroc_lastaccess where git_commit=? and git_reponame=?",(rev,reponame))
-					rows = cursor.fetchall()
-					r = False
-					while not r:
-						for row in rows:
-							query = "delete from gitroc_lastaccess where id=?"
-							cursor.execute(query,(row[0],))
-						r = conn_commit_safe()
-					dblock.release()
+        if regenerate_cache_entry:
+            if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea, urlstr, reponame, rev)):
+                os.system("chmod -R u+w %s/%s/%s.git/cache/%s" %
+                          (cachearea, urlstr, reponame, rev))
+                os.system("rm -rf %s/%s/%s.git/cache/%s" %
+                          (cachearea, urlstr, reponame, rev))
 
-				if action == "process":
-					if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea,urlstr,reponame,rev)):
-						retmain = 0
-						if debug:
-							print("Already exists")
-					else:
-						retmain = splitout(urlstr,reponame,rev)
-					clientqueue.put((retmain,number,'%s/%s/%s.git/cache/%s%s' % (cachearea,urlstr,reponame,rev,afterpath),reponame,branch,rev))
-				
-				unlock_repo(reponame)
-				if not justupdated and action == "process":
-					dblock.acquire()
-					check_if_db_open()
-					nowtime = datetime.datetime.now()
-					cursor.execute("select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame,rev,url))
-					row = cursor.fetchone()
-					r = False
-					while not r:
-						if row != None: 
-							cursor.execute("update gitroc_lastaccess set timestamp=? where id=?",(nowtime,row[0]))
-						else:
-							cursor.execute("insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime,url,reponame,rev))
-						r = conn_commit_safe()
-					dblock.release()
+            dblock.acquire()
+            check_if_db_open()
+            cursor.execute(
+                "select id from gitroc_lastaccess where git_commit=? and git_reponame=?", (rev, reponame))
+            rows = cursor.fetchall()
+            r = False
+            while not r:
+                for row in rows:
+                    query = "delete from gitroc_lastaccess where id=?"
+                    cursor.execute(query, (row[0],))
+                r = conn_commit_safe()
+            dblock.release()
 
-			except CannotFindError:
-				print("Cannot find the specified repository or revision (%s)" % (reponame))
-				#send_data['error'] = 'Not found'
-				#send_data['return'] = -1 
-				clientqueue.put((-1,number,'',reponame,branch,''))
-				unlock_repo(reponame)
+        if action == "process":
+            if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea, urlstr, reponame, rev)):
+                retmain = 0
+                if debug:
+                    print("Already exists")
+            else:
+                retmain = splitout(urlstr, reponame, rev)
+            clientqueue.put((retmain, number, '%s/%s/%s.git/cache/%s%s' %
+                            (cachearea, urlstr, reponame, rev, afterpath), reponame, branch, rev))
+
+        unlock_repo(reponame)
+        if not justupdated and action == "process":
+            dblock.acquire()
+            check_if_db_open()
+            nowtime = datetime.datetime.now()
+            cursor.execute(
+                "select id from gitroc_lastaccess where git_reponame=? and git_commit=? and git_url=?", (reponame, rev, url))
+            row = cursor.fetchone()
+            r = False
+            while not r:
+                if row != None:
+                    cursor.execute(
+                        "update gitroc_lastaccess set timestamp=? where id=?", (nowtime, row[0]))
+                else:
+                    cursor.execute(
+                        "insert into gitroc_lastaccess (timestamp,git_url,git_reponame,git_commit) values (?,?,?,?);", (nowtime, url, reponame, rev))
+                r = conn_commit_safe()
+            dblock.release()
+
+    except CannotFindError:
+        print("Cannot find the specified repository or revision (%s)" %
+              (reponame))
+        # send_data['error'] = 'Not found'
+        # send_data['return'] = -1
+        clientqueue.put((-1, number, '', reponame, branch, ''))
+        unlock_repo(reponame)
+
 
 class WorkerThread(threading.Thread):
-	def __init__(self,q):
-		threading.Thread.__init__(self)
-		self.running = 1
-		self.q = q
 
-	def run(self):
-		if debug:
-			print("WorkerThread started")
-		while self.running:
-			(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath) = self.q.get()
-			if action == 'quit': # Stopping worker thread
-				break
-			handle_one(number,action,url,reponame,branch,clientqueue,mode,requestedtime,afterpath)
-			self.q.task_done()
-			
+    def __init__(self, q):
+        threading.Thread.__init__(self)
+        self.running = 1
+        self.q = q
+
+    def run(self):
+        if debug:
+            print("WorkerThread started")
+        while self.running:
+            (number, action, url, reponame, branch, clientqueue,
+             mode, requestedtime, afterpath) = self.q.get()
+            if action == 'quit':  # Stopping worker thread
+                break
+            handle_one(number, action, url, reponame, branch,
+                       clientqueue, mode, requestedtime, afterpath)
+            self.q.task_done()
+
 
 class ClientHandler(threading.Thread):
 
-	def __init__(self, clientsocket, address):
-		threading.Thread.__init__(self)
-		global clientnum
-		if debug:
-			print("Created client handler")
-		self.clientsocket = clientsocket
-		self.address = address
-		self.running = True
-		clock.acquire()
-		clients.append((self,clientnum))
-		self.num = clientnum
-		clientnum = clientnum + 1
-		clock.release()
-		self.workqueue = -1
-		for j in range(0,len(workqueues)):
-			if workqueues[j].empty():
-				self.workqueue = j
-				break
-		if self.workqueue == -1:
-			self.workqueue = 0
-	
+    def __init__(self, clientsocket, address):
+        threading.Thread.__init__(self)
+        global clientnum
+        if debug:
+            print("Created client handler")
+        self.clientsocket = clientsocket
+        self.address = address
+        self.running = True
+        clock.acquire()
+        clients.append((self, clientnum))
+        self.num = clientnum
+        clientnum = clientnum + 1
+        clock.release()
+        self.workqueue = -1
+        for j in range(0, len(workqueues)):
+            if workqueues[j].empty():
+                self.workqueue = j
+                break
+        if self.workqueue == -1:
+            self.workqueue = 0
 
-	def run(self):
-		clientqueue = queue.Queue()
-		requests = 0
-		sent_so_far = 0
-		self.clientsocket.settimeout(1)
-		if debug:
-			print("Client socket running")
-		while self.running:
-			try:
-				jsondata = self.clientsocket.recv(5000)
-			except socket.timeout:
-				continue
-			except socket.error:
-				self.running = False
-				break
-			if not jsondata or not self.running:
-				self.running = False
-				break
-			if debug:
-				print(jsondata)
-			send_data = {}
-			try:
-				data = json.loads(jsondata.decode('utf-8'))
-				if debug:
-					print(data)
-				
-				if 'command' in data:
-					if data['command'] == 'checkout' or data['command'] == 'fetchonly':
-						if 'commit' in data:
-							branch = data['commit']
-						else:
-							branch = 'master'
-						if not 'url' in data:
-							raise MissingArgumentError
-						if not 'reponame' in data:
-							raise MissingArgumentError
-						if not 'mode' in data:
-							raise MissingArgumentError
-						if 'number' in data:
-							number = int(data['number'])
-						else:
-							number = -1
-						mode = data['mode']
-						reponame = data['reponame']
-						url = data['url']
-						nowtime = datetime.datetime.now()
-						if 'afterpath' in data:
-							afterpath = data['afterpath']
-							if len(afterpath) > 0 and  afterpath[0] != '/':
-								afterpath = "/%s" % (afterpath)
-						else:
-							afterpath = ""
-						if data['command'] == 'checkout':
-							workqueues[self.workqueue].put((number,'process',url,reponame,branch,clientqueue,mode,nowtime,afterpath))
-							requests = requests + 1
-						elif data['command'] == 'fetchonly':
-							workqueues[self.workqueue].put((number,'fetchonly',url,reponame,branch,clientqueue,mode,nowtime,afterpath))
-						print("Requesting %s:%s (%s)..." % (url,reponame,branch))
-						if debug:
-							print("requests: %d" % requests)
+    def run(self):
+        clientqueue = queue.Queue()
+        requests = 0
+        sent_so_far = 0
+        self.clientsocket.settimeout(1)
+        if debug:
+            print("Client socket running")
+        while self.running:
+            try:
+                jsondata = self.clientsocket.recv(5000)
+            except socket.timeout:
+                continue
+            except socket.error:
+                self.running = False
+                break
+            if not jsondata or not self.running:
+                self.running = False
+                break
+            if debug:
+                print(jsondata)
+            send_data = {}
+            try:
+                data = json.loads(jsondata.decode('utf-8'))
+                if debug:
+                    print(data)
 
-						send_data['return'] = 0
-					elif data['command'] == 'wait':
-						if debug:
-							print("requests: %d" % requests)
-						send_data['symlinks'] = []
-						for i in range(sent_so_far,requests):
-							element = {}
-							(returncode,number,symlink,reponame,branch,rev) = clientqueue.get()
-							sent_so_far = sent_so_far + 1
-							if number != -1:
-								element['number'] = number
-							element['reponame'] = reponame
-							element['branch'] = branch
-							element['returncode'] = returncode
-							if returncode == 0 or returncode == -6:
-								element['symlink'] = symlink
-								element['found'] = 'true'
-							else:
-								element['found'] = 'false'
-							send_data['symlinks'].append(element)
-							clientqueue.task_done()
-						send_data['complete'] = True 
-						send_data['return'] = 0
-					elif data['command'] == 'status':
-						if debug:
-							print("requests: %d" % requests)
-						send_data['symlinks'] = []
-						send_data['complete'] = True 
-						for i in range(sent_so_far,requests):
-							element = {}
-							if not clientqueue.empty():
-								(returncode,number,symlink,reponame,branch,rev) = clientqueue.get()
-								sent_so_far = sent_so_far + 1
-								if number != -1:
-									element['number'] = number
-								element['reponame'] = reponame
-								element['branch'] = branch
-								element['returncode'] = returncode
-								if returncode == 0 or returncode == -6:
-									element['symlink'] = symlink
-									element['found'] = 'true'
-								else:
-									element['found'] = 'false'
-								send_data['symlinks'].append(element)
-								clientqueue.task_done()
-							else:
-								send_data['complete'] = False
-						send_data['return'] = 0
-					elif data['command'] == 'exit':
-						self.running = False
-						break
-			except ValueError:
-				print("Not valid JSON data")
-			except MissingArgumentError:
-				print("Missing one argument")
-				send_data['error'] = 'Missing argument'
-				send_data['return'] = -1 
-			send_jsondata = json.dumps(send_data)
-			send_msg(self.clientsocket,send_jsondata.encode('utf-8'))
-		self.clientsocket.close()
-		clock.acquire()
-		thisclient = None
-		for client in clients:
-			if client[1] == self.num:
-				print("removing %s from %s" % (client,clients))
-				clients.remove(client)
-				break
-		clock.release()
-		print("stopped client thread")
-		
+                if 'command' in data:
+                    if data['command'] == 'checkout' or data['command'] == 'fetchonly':
+                        if 'commit' in data:
+                            branch = data['commit']
+                        else:
+                            branch = 'master'
+                        if not 'url' in data:
+                            raise MissingArgumentError
+                        if not 'reponame' in data:
+                            raise MissingArgumentError
+                        if not 'mode' in data:
+                            raise MissingArgumentError
+                        if 'number' in data:
+                            number = int(data['number'])
+                        else:
+                            number = -1
+                        mode = data['mode']
+                        reponame = data['reponame']
+                        url = data['url']
+                        nowtime = datetime.datetime.now()
+                        if 'afterpath' in data:
+                            afterpath = data['afterpath']
+                            if len(afterpath) > 0 and afterpath[0] != '/':
+                                afterpath = "/%s" % (afterpath)
+                        else:
+                            afterpath = ""
+                        if data['command'] == 'checkout':
+                            workqueues[self.workqueue].put(
+                                (number, 'process', url, reponame, branch, clientqueue, mode, nowtime, afterpath))
+                            requests = requests + 1
+                        elif data['command'] == 'fetchonly':
+                            workqueues[self.workqueue].put(
+                                (number, 'fetchonly', url, reponame, branch, clientqueue, mode, nowtime, afterpath))
+                        print("Requesting %s:%s (%s)..." %
+                              (url, reponame, branch))
+                        if debug:
+                            print("requests: %d" % requests)
+
+                        send_data['return'] = 0
+                    elif data['command'] == 'wait':
+                        if debug:
+                            print("requests: %d" % requests)
+                        send_data['symlinks'] = []
+                        for i in range(sent_so_far, requests):
+                            element = {}
+                            (returncode, number, symlink, reponame,
+                             branch, rev) = clientqueue.get()
+                            sent_so_far = sent_so_far + 1
+                            if number != -1:
+                                element['number'] = number
+                            element['reponame'] = reponame
+                            element['branch'] = branch
+                            element['returncode'] = returncode
+                            if returncode == 0 or returncode == -6:
+                                element['symlink'] = symlink
+                                element['found'] = 'true'
+                            else:
+                                element['found'] = 'false'
+                            send_data['symlinks'].append(element)
+                            clientqueue.task_done()
+                        send_data['complete'] = True
+                        send_data['return'] = 0
+                    elif data['command'] == 'status':
+                        if debug:
+                            print("requests: %d" % requests)
+                        send_data['symlinks'] = []
+                        send_data['complete'] = True
+                        for i in range(sent_so_far, requests):
+                            element = {}
+                            if not clientqueue.empty():
+                                (returncode, number, symlink, reponame,
+                                 branch, rev) = clientqueue.get()
+                                sent_so_far = sent_so_far + 1
+                                if number != -1:
+                                    element['number'] = number
+                                element['reponame'] = reponame
+                                element['branch'] = branch
+                                element['returncode'] = returncode
+                                if returncode == 0 or returncode == -6:
+                                    element['symlink'] = symlink
+                                    element['found'] = 'true'
+                                else:
+                                    element['found'] = 'false'
+                                send_data['symlinks'].append(element)
+                                clientqueue.task_done()
+                            else:
+                                send_data['complete'] = False
+                        send_data['return'] = 0
+                    elif data['command'] == 'exit':
+                        self.running = False
+                        break
+            except ValueError:
+                print("Not valid JSON data")
+            except MissingArgumentError:
+                print("Missing one argument")
+                send_data['error'] = 'Missing argument'
+                send_data['return'] = -1
+            send_jsondata = json.dumps(send_data)
+            send_msg(self.clientsocket, send_jsondata.encode('utf-8'))
+        self.clientsocket.close()
+        clock.acquire()
+        thisclient = None
+        for client in clients:
+            if client[1] == self.num:
+                print("removing %s from %s" % (client, clients))
+                clients.remove(client)
+                break
+        clock.release()
+        print("stopped client thread")
+
 
 class ServerThread(threading.Thread):
-	def __init__(self,s):
-		threading.Thread.__init__(self)
-		self.running = 1
-		self.s = s
-		if debug:
-			print("Created server thread")
 
-	def run(self):
-		if debug:
-			print("Running thread")
-			print("started listening")
-		while self.running:
-			(clientsocket, address) = self.s.accept()	
-			client_handler = ClientHandler(clientsocket,address)
-			client_handler.start()
-		self.s.close()
+    def __init__(self, s):
+        threading.Thread.__init__(self)
+        self.running = 1
+        self.s = s
+        if debug:
+            print("Created server thread")
+
+    def run(self):
+        if debug:
+            print("Running thread")
+            print("started listening")
+        while self.running:
+            (clientsocket, address) = self.s.accept()
+            client_handler = ClientHandler(clientsocket, address)
+            client_handler.start()
+        self.s.close()
+
 
 def listen_incoming(myipaddress):
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-	s.bind((myipaddress,19999))
-	s.listen(10)
-	server_thread = ServerThread(s)
-	server_thread.start()
-	return server_thread
+    s.bind((myipaddress, 19999))
+    s.listen(10)
+    server_thread = ServerThread(s)
+    server_thread.start()
+    return server_thread
 
 running = True
 
+
 def stop_server():
-	global running
-	running = False
-	# Stopping listening thread:
-	server_thread.running = False
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((myipaddress,19999))
-	s.close()
+    global running
+    running = False
+    # Stopping listening thread:
+    server_thread.running = False
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((myipaddress, 19999))
+    s.close()
 
-	clients_to_wait_for = []
-	clock.acquire()
-	for client in clients:
-		client[0].running = False
-		clients_to_wait_for.append(client[0])
-	clock.release()
+    clients_to_wait_for = []
+    clock.acquire()
+    for client in clients:
+        client[0].running = False
+        clients_to_wait_for.append(client[0])
+    clock.release()
 
-	for client in clients_to_wait_for:
-		if client.is_alive():
-			client.join()
+    for client in clients_to_wait_for:
+        if client.is_alive():
+            client.join()
 
-	# Stopping worker threads
-	cleanup_thread.running = False
-	for w in worker_thread:
-		w.running = False
-		w.q.put((-1,'quit',None,None,None,None,None,None,None))
+    # Stopping worker threads
+    cleanup_thread.running = False
+    for w in worker_thread:
+        w.running = False
+        w.q.put((-1, 'quit', None, None, None, None, None, None, None))
 
-	server_thread.join()
-	for w in worker_thread:
-		w.join()
-	print("Completing cleanup...")
-	cleanup_thread.join()
-	conn.close()
+    server_thread.join()
+    for w in worker_thread:
+        w.join()
+    print("Completing cleanup...")
+    cleanup_thread.join()
+    conn.close()
 
-def signal_handler(signal,frame):
-	global running
-	if running:
-		stop_server()
-	else:
-		sys.exit(-1)
-	print("\nServer stopped\nPress enter")
+
+def signal_handler(signal, frame):
+    global running
+    if running:
+        stop_server()
+    else:
+        sys.exit(-1)
+    print("\nServer stopped\nPress enter")
 
 getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-getipsock.connect(("gmail.com",80))
+getipsock.connect(("gmail.com", 80))
 myipaddress = str(getipsock.getsockname()[0])
 getipsock.close()
 
 
 worker_thread = []
-for i in range(0,4):
-	tmpq = queue.Queue()
-	workqueues.append(tmpq)
-	for j in range(0,10):
-		tmp = WorkerThread(tmpq)
-		worker_thread.append(tmp)
-		tmp.start()
+for i in range(0, 4):
+    tmpq = queue.Queue()
+    workqueues.append(tmpq)
+    for j in range(0, 10):
+        tmp = WorkerThread(tmpq)
+        worker_thread.append(tmp)
+        tmp.start()
 
 server_thread = listen_incoming(myipaddress)
 
@@ -676,8 +728,8 @@ signal.signal(signal.SIGINT, signal_handler)
 print("gitrocd is running...")
 cmd = input("")
 while cmd != 'q' and cmd != 'quit' and running:
-	print("Enter 'q' og 'quit' to quit")
-	cmd = input("")
+    print("Enter 'q' og 'quit' to quit")
+    cmd = input("")
 
 if running:
-	stop_server()
+    stop_server()

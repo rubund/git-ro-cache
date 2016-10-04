@@ -30,82 +30,84 @@ import struct
 
 number = 0
 
+
 def recv_msg(sock):
-	raw_msglen = sock.recv(4)
-	if not raw_msglen:
-		return None
-	msglen = struct.unpack('>I', raw_msglen)[0]
-	return recvall(sock, msglen)
+    raw_msglen = sock.recv(4)
+    if not raw_msglen:
+        return None
+    msglen = struct.unpack('>I', raw_msglen)[0]
+    return recvall(sock, msglen)
+
 
 def recvall(sock, n):
-	data = ''
-	while len(data) < n:
-		packet = sock.recv(n - len(data))
-		if not packet:
-			return None
-		data += packet.decode('utf-8')
-	return data
+    data = ''
+    while len(data) < n:
+        packet = sock.recv(n - len(data))
+        if not packet:
+            return None
+        data += packet.decode('utf-8')
+    return data
 
-def get_one(s,reponame,url,branch='master'):
-	global number;
-	data = {}
-	data['command'] = 'checkout'
-	data['reponame'] = reponame
-	data['url'] = url
-	data['commit'] = branch 
-	data['mode'] = 0
-	data['number'] = number
-	jsondata = json.dumps(data)
-	s.send(jsondata.encode('utf-8'))
-	resp = recv_msg(s)
-	number = number + 1
 
-def get_symlinks(s,command):
-	data = {}
-	data['command'] = command
-	jsondata = json.dumps(data)
-	s.send(jsondata.encode('utf-8'))
+def get_one(s, reponame, url, branch='master'):
+    global number
+    data = {}
+    data['command'] = 'checkout'
+    data['reponame'] = reponame
+    data['url'] = url
+    data['commit'] = branch
+    data['mode'] = 0
+    data['number'] = number
+    jsondata = json.dumps(data)
+    s.send(jsondata.encode('utf-8'))
+    resp = recv_msg(s)
+    number = number + 1
 
-	resp = recv_msg(s)
-	recv_jsondata = json.loads(resp)
-	if 'symlinks' in recv_jsondata:
-		for symlink in recv_jsondata['symlinks']:
-			if 'symlink'  in symlink:
-				localpath = "checkedout/%s" % (symlink['reponame'])
-				print(localpath)
-				os.system("""
+
+def get_symlinks(s, command):
+    data = {}
+    data['command'] = command
+    jsondata = json.dumps(data)
+    s.send(jsondata.encode('utf-8'))
+
+    resp = recv_msg(s)
+    recv_jsondata = json.loads(resp)
+    if 'symlinks' in recv_jsondata:
+        for symlink in recv_jsondata['symlinks']:
+            if 'symlink' in symlink:
+                localpath = "checkedout/%s" % (symlink['reponame'])
+                print(localpath)
+                os.system("""
 mkdir -p %s
 cd %s
 ln -sfT %s %s
-""" % (os.path.dirname(localpath),os.path.dirname(localpath),symlink['symlink'],os.path.basename(localpath)))
-	return recv_jsondata['complete']
+""" % (os.path.dirname(localpath), os.path.dirname(localpath), symlink['symlink'], os.path.basename(localpath)))
+    return recv_jsondata['complete']
+
 
 def send_message(jsondata=''):
-	getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	getipsock.connect(("gmail.com",80))
-	myipaddress = str(getipsock.getsockname()[0])
-	getipsock.close()
+    getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    getipsock.connect(("gmail.com", 80))
+    myipaddress = str(getipsock.getsockname()[0])
+    getipsock.close()
 
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((myipaddress,19999))
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((myipaddress, 19999))
 
-	get_one(s,'my-repo.git',url='git@github.com',branch='master')
+    get_one(s, 'my-repo.git', url='git@github.com', branch='master')
 
-	status = False
-	while status == False:
-		time.sleep(0.2)
-		status = get_symlinks(s,'status')
-	#get_symlinks(s,'wait')
+    status = False
+    while status == False:
+        time.sleep(0.2)
+        status = get_symlinks(s, 'status')
+    # get_symlinks(s,'wait')
 
-	#data = {}
-	#data['command'] = 'exit'
-	#jsondata = json.dumps(data)
-	#s.send(jsondata.encode('utf-8'))
-	#resp = recv_msg(s)
-	s.close()
-
-
+    # data = {}
+    # data['command'] = 'exit'
+    # jsondata = json.dumps(data)
+    # s.send(jsondata.encode('utf-8'))
+    # resp = recv_msg(s)
+    s.close()
 
 
 send_message()
-
