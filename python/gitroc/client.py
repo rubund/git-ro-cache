@@ -45,25 +45,6 @@ def recvall(sock, n):
     return data
 
 
-def get_symlinks(s, command, path="."):
-    data = {}
-    data['command'] = command
-    jsondata = json.dumps(data)
-    s.send(jsondata.encode('utf-8'))
-
-    resp = recv_msg(s)
-    recv_jsondata = json.loads(resp)
-    if 'symlinks' in recv_jsondata:
-        for symlink in recv_jsondata['symlinks']:
-            if 'symlink' in symlink:
-                localpath = "%s/%s" % (path, symlink['reponame'])
-                print(localpath)
-                os.system("""
-mkdir -p %s
-cd %s
-ln -sfT %s %s
-""" % (os.path.dirname(localpath), os.path.dirname(localpath), symlink['symlink'], os.path.basename(localpath)))
-    return recv_jsondata['complete']
 
 
 class GitrocClient:
@@ -77,13 +58,14 @@ class GitrocClient:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((gitroc_server, 19999))
         self.number = 0
+        self.destsubdir = {}
 
     def request_url(self, fullurl, branch="master"):
         url = ""
         reponame = ""
         self.request_one(url, reponame, branch=branch)
 
-    def request_one(self, url, reponame, branch="master"):
+    def request_one(self, url, reponame, branch="master", destsubdir=""):
         data = {}
         data['command'] = 'checkout'
         data['reponame'] = reponame
@@ -94,13 +76,38 @@ class GitrocClient:
         jsondata = json.dumps(data)
         self.s.send(jsondata.encode('utf-8'))
         resp = recv_msg(self.s)
+        self.destsubdir[self.number] = destsubdir
         self.number = self.number + 1
 
     def get_all(self):
         status = False
         while status == False:
             time.sleep(0.2)
-            status = get_symlinks(self.s, 'status', path=self.basedir)
+            status = self.get_symlinks('status', path=self.basedir)
+
+    def get_symlinks(self, command, path="."):
+        data = {}
+        data['command'] = command
+        jsondata = json.dumps(data)
+        self.s.send(jsondata.encode('utf-8'))
+
+        resp = recv_msg(self.s)
+        recv_jsondata = json.loads(resp)
+        if 'symlinks' in recv_jsondata:
+            for symlink in recv_jsondata['symlinks']:
+                if 'symlink' in symlink:
+                    if 'number' in symlink and self.destsubdir[symlink['number']] != "":
+                        destsubdir = self.destsubdir[symlink['number']]+"/"
+                    else:
+                        destsubdir = ""
+                    localpath = "%s/%s%s" % (path, destsubdir, symlink['reponame'])
+                    print(localpath)
+                    os.system("""
+mkdir -p %s
+cd %s
+ln -sfT %s %s
+    """ % (os.path.dirname(localpath), os.path.dirname(localpath), symlink['symlink'], os.path.basename(localpath)))
+        return recv_jsondata['complete']
 
     def close(self):
         self.s.close()
