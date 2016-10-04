@@ -34,6 +34,7 @@ import signal
 import re
 
 debug = False
+old_db_style = False
 
 cachearea = "/tmp/gitrocache"
 dbpath = '/tmp/gitrocd.db'
@@ -133,15 +134,19 @@ def unlock_repo(reponame):
     glock.release()
 
 
-def clone_repo(url, urlstr, reponame):
+def clone_repo(url, urlstr, reponame, version=1):
+    if version == 1:
+        suffix = ".git"
+    else:
+        suffix = ""
     command = """
 umask %s
 mkdir -p %s/%s
 cd %s/%s
-git clone --bare %s%s.git
-cd %s.git
+git clone --bare %s%s%s %s%s
+cd %s%s
 git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
-""" % (umask, cachearea, urlstr, cachearea, urlstr, url, reponame, reponame)
+""" % (umask, cachearea, urlstr, cachearea, urlstr, url, reponame, suffix, reponame, suffix, reponame, suffix)
     if debug:
         print(command)
         os.system(command)
@@ -155,7 +160,7 @@ git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
 
 def is_empty_repo(urlstr, reponame):
     command = """
-cd %s/%s/%s.git
+cd %s/%s/%s
 git show-ref > /dev/null
 """  % (cachearea, urlstr, reponame)
     try:
@@ -168,7 +173,7 @@ git show-ref > /dev/null
 def rev_parse(urlstr, reponame, branch):
     command = """
 umask %s
-cd %s/%s/%s.git
+cd %s/%s/%s
 git rev-parse %s
 """ % (umask, cachearea, urlstr, reponame, branch)
     if debug:
@@ -181,7 +186,7 @@ git rev-parse %s
 
     if rev == branch:
         command = """
-cd %s/%s/%s.git
+cd %s/%s/%s
 git cat-file -p %s
 """ % (cachearea, urlstr, reponame, branch)
         istag = False
@@ -207,7 +212,7 @@ git cat-file -p %s
 def git_fetch(urlstr, reponame):
     command = """
 umask %s
-cd %s/%s/%s.git
+cd %s/%s/%s
 git fetch --tags --all
 """ % (umask, cachearea, urlstr, reponame)
     if debug:
@@ -226,7 +231,7 @@ def commit_exists(urlstr, reponame, rev):
         print(rev)
     command = """
 umask %s
-cd %s/%s/%s.git
+cd %s/%s/%s
 git rev-list --all --remotes | grep -q %s
 echo $?
 """ % (umask, cachearea, urlstr, reponame, rev)
@@ -240,7 +245,7 @@ echo $?
 def splitout(urlstr, reponame, rev):
     command = """
 umask %s
-cd %s/%s/%s.git
+cd %s/%s/%s
 mkdir -p cache/%s
 chmod -R u+w cache/%s
 git archive %s | tar -x -C cache/%s
@@ -258,12 +263,12 @@ git archive %s | tar -x -C cache/%s
     retmain = 0
     if retmain == 0:
         command = """
-cd %s/%s/%s.git
+cd %s/%s/%s
 chmod -R a-w cache/%s
 """ % (cachearea, urlstr, reponame, rev)
     else:  # If failed, delete cache version
         command = """
-rm -rf %s/%s/%s.git/cache/%s
+rm -rf %s/%s/%s/cache/%s
 """ % (cachearea, urlstr, reponame, rev)
     os.system(command)
     return retmain
@@ -288,10 +293,14 @@ class CleanupThread(threading.Thread):
                 urlstr = base64.urlsafe_b64encode(
                     row[1].encode('utf-8')).decode('utf-8')
                 lock_repo(row[2])
+                if old_db_style:
+                    suffix = ".git"
+                else:
+                    suffix = ""
                 command = """
-chmod -R u+w %s/%s/%s.git/cache/%s
-rm -rf %s/%s/%s.git/cache/%s
-""" % (cachearea, urlstr, row[2], row[3], cachearea, urlstr, row[2], row[3])
+chmod -R u+w %s/%s/%s%s/cache/%s
+rm -rf %s/%s/%s%s/cache/%s
+""" % (cachearea, urlstr, row[2], suffix, row[3], cachearea, urlstr, row[2], suffix, row[3])
                 print(command)
                 os.system(command)
                 unlock_repo(row[2])
@@ -341,46 +350,50 @@ def check_if_db_open():
         cursor = conn.cursor()
 
 
-def handle_one(number, action, url, reponame, branch, clientqueue, mode, requestedtime, afterpath, regenerate_cache_entry=False):
+def handle_one(number, action, version, url, reponame, branch, clientqueue, mode, requestedtime, afterpath, regenerate_cache_entry=False):
     urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
-    lock_repo(reponame)
+    if version == 1:
+        suffix = ".git"
+    else:
+        suffix = ""
+    lock_repo(reponame+""+suffix)
 
     try:
-        if not os.path.isdir("%s/%s/%s.git" % (cachearea, urlstr, reponame)):
-            clone_repo(url, urlstr, reponame)
-            if(not os.path.isdir("%s/%s/%s.git" % (cachearea, urlstr, reponame))):
+        if not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix)):
+            clone_repo(url, urlstr, reponame, version=version)
+            if(not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix))):
                 raise CannotFindError
 
-        if is_empty_repo(urlstr, reponame):
-            git_fetch(urlstr, reponame)
-            if is_empty_repo(urlstr, reponame):
-                os.system("mkdir -p %s/%s/%s.git/cache/empty" %
-                          (cachearea, urlstr, reponame))
-                clientqueue.put((-6, number, '%s/%s/%s.git/cache/empty' %
-                                (cachearea, urlstr, reponame), reponame, "empty", "empty"))
-                unlock_repo(reponame)
+        if is_empty_repo(urlstr, reponame+""+suffix):
+            git_fetch(urlstr, reponame+""+suffix)
+            if is_empty_repo(urlstr, reponame+""+suffix):
+                os.system("mkdir -p %s/%s/%s%s/cache/empty" %
+                          (cachearea, urlstr, reponame, suffix))
+                clientqueue.put((-6, number, '%s/%s/%s%s/cache/empty' %
+                                (cachearea, urlstr, reponame, suffix), reponame, "empty", "empty"))
+                unlock_repo(reponame+""+suffix)
                 return
 
-        rev = rev_parse(urlstr, reponame, branch)
+        rev = rev_parse(urlstr, reponame+""+suffix, branch)
         if debug:
             print(rev)
         justupdated = False
         if rev == branch:  # Commit id has been specified directly
-            if commit_exists(urlstr, reponame, rev) == 0:
-                git_fetch(urlstr, reponame)
-                if commit_exists(urlstr, reponame, rev) == 0:
+            if commit_exists(urlstr, reponame+""+suffix, rev) == 0:
+                git_fetch(urlstr, reponame+""+suffix)
+                if commit_exists(urlstr, reponame+""+suffix, rev) == 0:
                     raise CannotFindError
         elif rev == "":    # Cannot find reference, maybe needs fetch
-            git_fetch(urlstr, reponame)
-            rev = rev_parse(urlstr, reponame, branch)
+            git_fetch(urlstr, reponame+""+suffix)
+            rev = rev_parse(urlstr, reponame+""+suffix, branch)
             if rev == "":
                 raise CannotFindError
         else:              # Has found reference, but maybe needs to update
             if (mode != 1 and 'tags/' not in branch) or action == "fetchonly":
                 justupdated = just_updated(url, reponame, rev)
                 if not justupdated or action == "fetchonly":
-                    git_fetch(urlstr, reponame)
-            rev = rev_parse(urlstr, reponame, branch)
+                    git_fetch(urlstr, reponame+""+suffix)
+            rev = rev_parse(urlstr, reponame+""+suffix, branch)
             if rev == "":
                 raise CannotFindError
 
@@ -391,11 +404,11 @@ def handle_one(number, action, url, reponame, branch, clientqueue, mode, request
             raise CannotFindError
 
         if regenerate_cache_entry:
-            if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea, urlstr, reponame, rev)):
-                os.system("chmod -R u+w %s/%s/%s.git/cache/%s" %
-                          (cachearea, urlstr, reponame, rev))
-                os.system("rm -rf %s/%s/%s.git/cache/%s" %
-                          (cachearea, urlstr, reponame, rev))
+            if os.path.isdir("%s/%s/%s%s/cache/%s" % (cachearea, urlstr, reponame, suffix, rev)):
+                os.system("chmod -R u+w %s/%s/%s%s/cache/%s" %
+                          (cachearea, urlstr, reponame, suffix, rev))
+                os.system("rm -rf %s/%s/%s%s/cache/%s" %
+                          (cachearea, urlstr, reponame, suffix, rev))
 
             dblock.acquire()
             check_if_db_open()
@@ -411,16 +424,16 @@ def handle_one(number, action, url, reponame, branch, clientqueue, mode, request
             dblock.release()
 
         if action == "process":
-            if os.path.isdir("%s/%s/%s.git/cache/%s" % (cachearea, urlstr, reponame, rev)):
+            if os.path.isdir("%s/%s/%s%s/cache/%s" % (cachearea, urlstr, reponame, suffix, rev)):
                 retmain = 0
                 if debug:
                     print("Already exists")
             else:
-                retmain = splitout(urlstr, reponame, rev)
-            clientqueue.put((retmain, number, '%s/%s/%s.git/cache/%s%s' %
-                            (cachearea, urlstr, reponame, rev, afterpath), reponame, branch, rev))
+                retmain = splitout(urlstr, reponame+""+suffix, rev)
+            clientqueue.put((retmain, number, '%s/%s/%s%s/cache/%s%s' %
+                            (cachearea, urlstr, reponame, suffix, rev, afterpath), reponame, branch, rev))
 
-        unlock_repo(reponame)
+        unlock_repo(reponame+""+suffix)
         if not justupdated and action == "process":
             dblock.acquire()
             check_if_db_open()
@@ -440,12 +453,12 @@ def handle_one(number, action, url, reponame, branch, clientqueue, mode, request
             dblock.release()
 
     except CannotFindError:
-        print("Cannot find the specified repository or revision (%s)" %
-              (reponame))
+        print("Cannot find the specified repository or revision (%s%s)" %
+              (reponame, suffix))
         # send_data['error'] = 'Not found'
         # send_data['return'] = -1
         clientqueue.put((-1, number, '', reponame, branch, ''))
-        unlock_repo(reponame)
+        unlock_repo(reponame+""+suffix)
 
 
 class WorkerThread(threading.Thread):
@@ -459,11 +472,11 @@ class WorkerThread(threading.Thread):
         if debug:
             print("WorkerThread started")
         while self.running:
-            (number, action, url, reponame, branch, clientqueue,
+            (number, action, version, url, reponame, branch, clientqueue,
              mode, requestedtime, afterpath) = self.q.get()
             if action == 'quit':  # Stopping worker thread
                 break
-            handle_one(number, action, url, reponame, branch,
+            handle_one(number, action, version, url, reponame, branch,
                        clientqueue, mode, requestedtime, afterpath)
             self.q.task_done()
 
@@ -523,6 +536,10 @@ class ClientHandler(threading.Thread):
                             branch = data['commit']
                         else:
                             branch = 'master'
+                        if 'version' in data:
+                            version = (int(data['version']))
+                        else:
+                            version = 1
                         if not 'url' in data:
                             raise MissingArgumentError
                         if not 'reponame' in data:
@@ -545,11 +562,11 @@ class ClientHandler(threading.Thread):
                             afterpath = ""
                         if data['command'] == 'checkout':
                             workqueues[self.workqueue].put(
-                                (number, 'process', url, reponame, branch, clientqueue, mode, nowtime, afterpath))
+                                (number, 'process', version, url, reponame, branch, clientqueue, mode, nowtime, afterpath))
                             requests = requests + 1
                         elif data['command'] == 'fetchonly':
                             workqueues[self.workqueue].put(
-                                (number, 'fetchonly', url, reponame, branch, clientqueue, mode, nowtime, afterpath))
+                                (number, 'fetchonly', version, url, reponame, branch, clientqueue, mode, nowtime, afterpath))
                         print("Requesting %s:%s (%s)..." %
                               (url, reponame, branch))
                         if debug:
@@ -685,7 +702,7 @@ def stop_server():
     cleanup_thread.running = False
     for w in worker_thread:
         w.running = False
-        w.q.put((-1, 'quit', None, None, None, None, None, None, None))
+        w.q.put((-1, 'quit', None, None, None, None, None, None, None, None))
 
     server_thread.join()
     for w in worker_thread:
