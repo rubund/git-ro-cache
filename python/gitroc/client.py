@@ -86,6 +86,15 @@ class GitrocClient:
             self.localname[self.number] = localname
         self.number = self.number + 1
 
+    def request_element(self, element):
+        url = element.urlshort
+        reponame = element.reponame
+        suffix = element.suffix
+        localname = element.localname
+        destsubdir = element.destsubdir
+        branch = element.branch
+        self.request_one(url, reponame, localname=localname, suffix=suffix, branch=branch, destsubdir=destsubdir)
+
     def get_all(self):
         status = False
         while status == False:
