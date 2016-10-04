@@ -67,8 +67,8 @@ ln -sfT %s %s
 
 
 class GitrocClient:
-    def __init__(self, basedir=".", gitroc_server=None):
-        self.basedir = basedir
+    def __init__(self, destdir=".", gitroc_server=None):
+        self.basedir = destdir
         if not gitroc_server: # If no server is given, use the local server
             getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             getipsock.connect(("gmail.com", 80))
