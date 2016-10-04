@@ -4,9 +4,9 @@
 
 import gitroc
 
-c = gitroc.GitrocClient()
+c = gitroc.GitrocClient(destdir=".")
 
-c.request_one("gitolite3@localhost:", "gitolite-admin")
+c.request_one("gitolite3@localhost:", "gitolite-admin", destsubdir="")
 
 c.get_all()
 

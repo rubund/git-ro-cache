@@ -73,6 +73,7 @@ class GitrocClient:
         data['commit'] = branch
         data['mode'] = 0
         data['number'] = self.number
+        data['version'] = 2
         jsondata = json.dumps(data)
         self.s.send(jsondata.encode('utf-8'))
         resp = recv_msg(self.s)
