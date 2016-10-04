@@ -39,16 +39,23 @@ class Element:
     def update_fields(self):
         m1 = self.matchurlslash.match(self.url)
         m2 = self.matchurlcolon.match(self.url)
-        if m2 != None and len(m2.groups()) >= 2:
+        fullrepoandsuffix = ""
+        if m1 != None and len(m1.groups()) >= 2:
+            self._urlshort = m1.group(1)
+            fullrepoandsuffix = m1.group(2)
+        elif m2 != None and len(m2.groups()) >= 2:
             self._urlshort = m2.group(1)
             fullrepoandsuffix = m2.group(2)
-            m3 = self.matchgit.match(fullrepoandsuffix)
-            if m3 != None and len(m3.groups()) >= 2:
-                self._reponame = m3.group(1)
-                self._suffix = m3.group(2)
-            else:
-                self._reponame = fullrepoandsuffix
-                self._suffix = ""
+        if fullrepoandsuffix == "":
+            sys.stderr.write("Couldn't parse\n")
+            return
+        m3 = self.matchgit.match(fullrepoandsuffix)
+        if m3 != None and len(m3.groups()) >= 2:
+            self._reponame = m3.group(1)
+            self._suffix = m3.group(2)
+        else:
+            self._reponame = fullrepoandsuffix
+            self._suffix = ""
         m4 = self.matchlocal.match(self.localpath)
         if m4 != None and len(m4.groups()) >= 2:
             self._destsubdir = m4.group(1)
