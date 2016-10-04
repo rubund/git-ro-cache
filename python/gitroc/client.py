@@ -59,16 +59,18 @@ class GitrocClient:
         self.s.connect((gitroc_server, 19999))
         self.number = 0
         self.destsubdir = {}
+        self.localname = {}
 
-    def request_url(self, fullurl, branch="master"):
+    def request_url(self, fullurl, localname=None, branch="master", destsubdir=""):
         url = ""
         reponame = ""
-        self.request_one(url, reponame, branch=branch)
+        suffix = ".git"
+        self.request_one(url, reponame, localname=localname, suffix=suffix, branch=branch, destsubdir=destsubdir)
 
-    def request_one(self, url, reponame, branch="master", destsubdir=""):
+    def request_one(self, url, reponame, localname=None, suffix=".git", branch="master", destsubdir=""):
         data = {}
         data['command'] = 'checkout'
-        data['reponame'] = reponame
+        data['reponame'] = reponame+""+suffix
         data['url'] = url
         data['commit'] = branch
         data['mode'] = 0
@@ -78,6 +80,10 @@ class GitrocClient:
         self.s.send(jsondata.encode('utf-8'))
         resp = recv_msg(self.s)
         self.destsubdir[self.number] = destsubdir
+        if not localname:
+            self.localname[self.number] = reponame
+        else:
+            self.localname[self.number] = localname
         self.number = self.number + 1
 
     def get_all(self):
@@ -101,7 +107,7 @@ class GitrocClient:
                         destsubdir = self.destsubdir[symlink['number']]+"/"
                     else:
                         destsubdir = ""
-                    localpath = "%s/%s%s" % (path, destsubdir, symlink['reponame'])
+                    localpath = "%s/%s%s" % (path, destsubdir, self.localname[symlink['number']])
                     print(localpath)
                     os.system("""
 mkdir -p %s
