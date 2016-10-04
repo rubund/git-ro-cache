@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 #
-#  Copyright (C) 2015 Ruben Undheim <ruben.undheim@gmail.com>
+#  Copyright (C) 2015,2016 Ruben Undheim <ruben.undheim@gmail.com>
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -19,16 +19,12 @@
 
 
 import os
-import subprocess
 import sys
-import mysql.connector
 import socket
-import threading
 import time
 import json
 import struct
 
-number = 0
 
 
 def recv_msg(sock):
@@ -49,22 +45,7 @@ def recvall(sock, n):
     return data
 
 
-def get_one(s, reponame, url, branch='master'):
-    global number
-    data = {}
-    data['command'] = 'checkout'
-    data['reponame'] = reponame
-    data['url'] = url
-    data['commit'] = branch
-    data['mode'] = 0
-    data['number'] = number
-    jsondata = json.dumps(data)
-    s.send(jsondata.encode('utf-8'))
-    resp = recv_msg(s)
-    number = number + 1
-
-
-def get_symlinks(s, command):
+def get_symlinks(s, command, path="."):
     data = {}
     data['command'] = command
     jsondata = json.dumps(data)
@@ -75,7 +56,7 @@ def get_symlinks(s, command):
     if 'symlinks' in recv_jsondata:
         for symlink in recv_jsondata['symlinks']:
             if 'symlink' in symlink:
-                localpath = "checkedout/%s" % (symlink['reponame'])
+                localpath = "%s/%s" % (path, symlink['reponame'])
                 print(localpath)
                 os.system("""
 mkdir -p %s
@@ -85,29 +66,45 @@ ln -sfT %s %s
     return recv_jsondata['complete']
 
 
-def send_message(jsondata=''):
-    getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    getipsock.connect(("gmail.com", 80))
-    myipaddress = str(getipsock.getsockname()[0])
-    getipsock.close()
+class GitrocClient:
+    def __init__(self, basedir=".", gitroc_server=None):
+        self.basedir = basedir
+        if not gitroc_server: # If no server is given, use the local server
+            getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            getipsock.connect(("gmail.com", 80))
+            gitroc_server = str(getipsock.getsockname()[0])
+            getipsock.close()
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.connect((gitroc_server, 19999))
+        self.number = 0
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((myipaddress, 19999))
+    def request_url(self, fullurl, branch="master"):
+        url = ""
+        reponame = ""
+        self.request_one(url, reponame, branch=branch)
 
-    get_one(s, 'my-repo.git', url='git@github.com', branch='master')
+    def request_one(self, url, reponame, branch="master"):
+        data = {}
+        data['command'] = 'checkout'
+        data['reponame'] = reponame
+        data['url'] = url
+        data['commit'] = branch
+        data['mode'] = 0
+        data['number'] = self.number
+        jsondata = json.dumps(data)
+        self.s.send(jsondata.encode('utf-8'))
+        resp = recv_msg(self.s)
+        self.number = self.number + 1
 
-    status = False
-    while status == False:
-        time.sleep(0.2)
-        status = get_symlinks(s, 'status')
-    # get_symlinks(s,'wait')
+    def get_all(self):
+        status = False
+        while status == False:
+            time.sleep(0.2)
+            status = get_symlinks(self.s, 'status', path=self.basedir)
 
-    # data = {}
-    # data['command'] = 'exit'
-    # jsondata = json.dumps(data)
-    # s.send(jsondata.encode('utf-8'))
-    # resp = recv_msg(s)
-    s.close()
+    def close(self):
+        self.s.close()
+        self.number = 0
 
-
-send_message()
+    def __del__(self):
+        pass
