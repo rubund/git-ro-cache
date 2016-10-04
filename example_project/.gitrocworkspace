@@ -1,0 +1,4 @@
+checked_out_with_ssh/git-ro-cache     git@github.com:rubund/git-ro-cache.git         master
+checked_out_with_https/git-ro-cache   https://github.com/rubund/git-ro-cache.git     master
+mrtdreader                            https://github.com/rubund/mrtdreader.git       master
+others_projects/sosi2osm              git@github.com:Gnonthgol/sosi2osm.git          debian
