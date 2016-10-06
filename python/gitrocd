@@ -37,6 +37,7 @@ debug = False
 old_db_style = False
 
 cachearea = "/tmp/gitrocache"
+lockarea = "/tmp/gitrocache/locks"
 dbpath = '/tmp/gitrocd.db'
 umask = "027"
 os.system("mkdir -p %s" % (cachearea))
@@ -118,10 +119,10 @@ def lock_repo(reponame):
     available = False
     while not available:
         glock.acquire()
-        if not os.path.isfile("%s/locks/%s.lock" % (cachearea, reponame)):
+        if not os.path.isfile("%s/%s.lock" % (lockarea, reponame)):
             available = True
-            os.system("mkdir -p %s/locks && touch %s/locks/%s.lock" %
-                      (cachearea, cachearea, reponame))
+            os.system("mkdir -p %s && touch %s/%s.lock" %
+                      (lockarea, lockarea, reponame))
             glock.release()
             break
         glock.release()
@@ -130,7 +131,7 @@ def lock_repo(reponame):
 
 def unlock_repo(reponame):
     glock.acquire()
-    os.system("rm -f %s/locks/%s.lock" % (cachearea, reponame))
+    os.system("rm -f %s/%s.lock" % (lockarea, reponame))
     glock.release()
 
 
