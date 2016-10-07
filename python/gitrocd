@@ -85,6 +85,10 @@ CREATE TABLE `gitroc_lastaccess` (
 );
 """)
         cursor.execute("""
+CREATE INDEX `index_gitroc_lastaccess`
+  ON `gitroc_lastaccess` (git_url,git_reponame,git_commit);
+""")
+        cursor.execute("""
 CREATE TABLE `gitroc_revparse` (
   `id` INTEGER PRIMARY KEY,
   `timestamp` timestamp ,
@@ -94,6 +98,10 @@ CREATE TABLE `gitroc_revparse` (
   `git_commit` varchar(256),
   `istag` boolean
 );
+""")
+        cursor.execute("""
+CREATE INDEX `index_gitroc_revparse`
+  ON `gitroc_revparse` (git_reponame,git_branch,git_url);
 """)
         r = conn_commit_safe()
 
