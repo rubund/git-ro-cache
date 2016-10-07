@@ -84,6 +84,17 @@ CREATE TABLE `gitroc_lastaccess` (
   `git_commit` varchar(256)
 );
 """)
+        cursor.execute("""
+CREATE TABLE `gitroc_revparse` (
+  `id` INTEGER PRIMARY KEY,
+  `timestamp` timestamp ,
+  `git_branch` varchar(256) ,
+  `git_url` varchar(256) ,
+  `git_reponame` varchar(256),
+  `git_commit` varchar(256),
+  `istag` boolean
+);
+""")
         r = conn_commit_safe()
 
 dblock = threading.Lock()
@@ -360,12 +371,19 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
     lock_repo(reponame+""+suffix)
 
     try:
-        if not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix)):
+        dblock.acquire()
+        check_if_db_open()
+        cursor.execute(
+            "select id from gitroc_lastaccess where git_reponame=? and git_url=? limit 1", (reponame, url))
+        row = cursor.fetchone()
+        dblock.release()
+
+        if row == None and not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix)):
             clone_repo(url, urlstr, reponame, version=version)
             if(not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix))):
                 raise CannotFindError
 
-        if is_empty_repo(urlstr, reponame+""+suffix):
+        if row == None and is_empty_repo(urlstr, reponame+""+suffix):
             git_fetch(urlstr, reponame+""+suffix)
             if is_empty_repo(urlstr, reponame+""+suffix):
                 os.system("mkdir -p %s/%s/%s%s/cache/empty" %
@@ -375,7 +393,27 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
                 unlock_repo(reponame+""+suffix)
                 return
 
-        rev = rev_parse(urlstr, reponame+""+suffix, branch)
+        if branch[0:5] == "tags/":
+            istag = True
+        else:
+            istag = False
+        rowrevparse = None
+        notfoundindb = False
+        if istag and mode == 1:
+            dblock.acquire()
+            check_if_db_open()
+            cursor.execute(
+                "select id, git_commit, istag from gitroc_revparse where git_branch=? and git_reponame=? and git_url=? limit 1", (branch, reponame, url))
+            rowrevparse = cursor.fetchone()
+            dblock.release()
+            if rowrevparse == None:
+                notfoundindb = True
+
+        if rowrevparse == None:
+            rev = rev_parse(urlstr, reponame+""+suffix, branch)
+        else:
+            rev = rowrevparse[1]
+
         if debug:
             print(rev)
         justupdated = False
@@ -394,9 +432,20 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
                 justupdated = just_updated(url, reponame, rev)
                 if not justupdated or action == "fetchonly":
                     git_fetch(urlstr, reponame+""+suffix)
-            rev = rev_parse(urlstr, reponame+""+suffix, branch)
+                    rev = rev_parse(urlstr, reponame+""+suffix, branch)
             if rev == "":
                 raise CannotFindError
+
+        if notfoundindb:
+            nowtime = datetime.datetime.now()
+            dblock.acquire()
+            check_if_db_open()
+            r = False
+            while not r:
+                query = "insert into gitroc_revparse (git_commit, git_reponame, git_branch, timestamp, git_url, istag) values (?,?,?,?,?,?)"
+                cursor.execute(query, (rev, reponame, branch, nowtime, url, istag))
+                r = conn_commit_safe()
+            dblock.release()
 
         if debug:
             print(rev)
