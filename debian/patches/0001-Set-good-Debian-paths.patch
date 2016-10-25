@@ -1,0 +1,25 @@
+From: Ruben Undheim <ruben.undheim@gmail.com>
+Date: Tue, 25 Oct 2016 08:20:20 +0200
+Subject: Set good Debian paths
+
+---
+ python/gitrocd | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/python/gitrocd b/python/gitrocd
+index f17471c..bff1d14 100755
+--- a/python/gitrocd
++++ b/python/gitrocd
+@@ -36,9 +36,9 @@ import re
+ debug = False
+ old_db_style = False
+ 
+-cachearea = "/tmp/gitrocache"
+-lockarea = "/tmp/gitrocache/locks"
+-dbpath = '/tmp/gitrocd.db'
++cachearea = "/var/lib/gitroc/gitrocache"
++lockarea = "/var/lib/gitroc/gitrocache/locks"
++dbpath = '/var/lib/gitroc/gitrocd.db'
+ umask = "027"
+ os.system("mkdir -p %s" % (cachearea))
+ os.system("rm -f %s/locks/*.lock" % (cachearea))
