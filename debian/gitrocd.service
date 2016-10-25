@@ -1,0 +1,13 @@
+[Unit]
+Description=Background process for gitrocd
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/screen -dmS gitrocd /usr/bin/python3 /usr/sbin/gitrocd
+ExecStop=/usr/bin/screen -S gitrocd -X quit
+User=gitroc
+Type=forking
+
+
+[Install]
+WantedBy=multi-user.target

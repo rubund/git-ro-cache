@@ -1,0 +1,58 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          gitrocd
+# Required-Start:    $remote_fs mysql
+# Required-Stop:     $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: <Enter a short description of the software>
+# Description:       <Enter a long description of the software>
+#                    <...>
+#                    <...>
+### END INIT INFO
+
+# Author: Ruben Undheim <ruben.undheim@gmail.com>
+
+
+DESC="Background process for git-ro-cache"
+NAME=gitrocd
+DAEMON=/usr/sbin/gitrocd
+
+. /lib/lsb/init-functions
+
+
+do_start(){
+
+    echo "starting"
+    /bin/su gitroc -c "/usr/bin/screen -dmS gitrocd /usr/bin/python3 /usr/sbin/gitrocd"
+
+}
+
+do_stop(){
+
+    echo "stopping"
+    /bin/su gitroc -c "/usr/bin/screen -S gitrocd -X quit"
+
+}
+
+case "$1" in
+  start)
+    do_start
+  ;;
+  stop|graceful-stop)
+    do_stop
+  ;;
+  status)
+  ;;
+  reload|force-reload|graceful)
+  ;;
+  restart)
+    do_stop
+    do_start
+  ;;
+esac
+
+exit 0
+
+
+
