@@ -8,7 +8,13 @@ Homepage: <insert the upstream URL, if relevant>
 #Vcs-Git: https://anonscm.debian.org/collab-maint/git-ro-cache.git
 #Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/git-ro-cache.git
 
-Package: git-ro-cache
+Package: gitrocd
+Architecture: all
+Depends: ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
+Package: python3-gitroc
 Architecture: all
 Depends: ${misc:Depends}
 Description: <insert up to 60 chars description>
