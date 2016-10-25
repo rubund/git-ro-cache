@@ -1,0 +1,15 @@
+Source: git-ro-cache
+Section: unknown
+Priority: optional
+Maintainer: Ruben Undheim <ruben.undheim@gmail.com>
+Build-Depends: debhelper (>= 9)
+Standards-Version: 3.9.8
+Homepage: <insert the upstream URL, if relevant>
+#Vcs-Git: https://anonscm.debian.org/collab-maint/git-ro-cache.git
+#Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/git-ro-cache.git
+
+Package: git-ro-cache
+Architecture: all
+Depends: ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
