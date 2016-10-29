@@ -46,16 +46,22 @@ class CloneThread(threading.Thread):
             repo.remotes['origin'].fetch()
             origin = repo.remotes['origin']
             try:
-                repo.create_head(e.branch, origin.refs[e.branch])
-                repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+                if not e.branch in repo.heads:
+                    repo.create_head(e.branch, origin.refs[e.branch])
+                    repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
                 repo.heads[e.branch].checkout()
-                retval = os.system("cd '%s/%s/%s' ; git merge --ff-only" % (self.ws.path, e.destsubdir, e.localname))
-            except git.exc.GitCommandError:
-                print("Git error")
+                repo.git.merge("--ff-only")
+            except git.exc.GitCommandError as e:
+                print("Git error %s" % e)
         else:
             os.system("mkdir -p '%s/%s'" % (self.ws.path, e.destsubdir))
             repo = git.Repo.clone_from(e.url, "%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
             origin = repo.remotes['origin']
-            repo.create_head(e.branch, origin.refs[e.branch])
-            repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
-            repo.heads[e.branch].checkout()
+            try:
+                if not e.branch in repo.heads:
+                    repo.create_head(e.branch, origin.refs[e.branch])
+                    repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+                repo.heads[e.branch].checkout()
+            except git.exc.GitCommandError as e:
+                print("Git error %s" % e)
+        print("%s/%s/%s (RW)" % (self.ws.path, e.destsubdir, e.localname))
