@@ -38,6 +38,13 @@ class CloneThread(threading.Thread):
                 break
 
     def clone_repo(self, e):
-        os.system("mkdir -p %s/%s" % (self.ws.path, e.destsubdir))
-        os.system("cd %s/%s ; git clone %s %s" % (self.ws.path, e.destsubdir, e.url, e.localname))
-        os.system("cd %s/%s/%s ; git checkout %s" % (self.ws.path, e.destsubdir, e.localname, e.branch))
+        if os.path.islink("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname)):
+            os.system("rm -f '%s/%s/%s'" % (self.ws.path, e.destsubdir, e.localname))
+        if os.path.isdir("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname)):
+            retval = os.system("cd '%s/%s/%s' ; git fetch --tags ; git checkout %s" % (self.ws.path, e.destsubdir, e.localname, e.branch))
+            if retval == 0:
+                retval = os.system("cd '%s/%s/%s' ; git merge --ff-only" % (self.ws.path, e.destsubdir, e.localname))
+        else:
+            os.system("mkdir -p '%s/%s'" % (self.ws.path, e.destsubdir))
+            os.system("cd '%s/%s' ; git clone %s %s" % (self.ws.path, e.destsubdir, e.url, e.localname))
+            os.system("cd '%s/%s/%s' ; git checkout %s" % (self.ws.path, e.destsubdir, e.localname, e.branch))
