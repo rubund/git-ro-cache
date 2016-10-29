@@ -19,18 +19,34 @@
 
 from gitroc import client
 from gitroc import configuration
+from gitroc import clonethread
 
+import queue
 
 
 class Workspace:
     def __init__(self, path="."):
         self.path = path
         self.cfg = configuration.Configuration(path+"/.gitrocworkspace")
+        self.rwqueue = queue.Queue()
+        self.nworkers = 8
         pass
 
     def checkout(self):
         c = client.GitrocClient(destdir=self.path)
         for e in self.cfg.elements:
-            c.request_element(e)
+            if e.rw:
+                self.rwqueue.put(e)
+            else:
+                c.request_element(e)
+
+        clone_threads = []
+        for i in range(0, self.nworkers):
+            tmp = clonethread.CloneThread(self)
+            clone_threads.append(tmp)
+            tmp.start()
         c.get_all()
         c.close()
+
+        for t in clone_threads:
+            t.join()
