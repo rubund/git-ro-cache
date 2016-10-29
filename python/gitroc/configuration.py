@@ -20,7 +20,7 @@
 import re
 
 class Element:
-    def __init__(self, localpath, url, branch, rwro):
+    def __init__(self, localpath, url, branch, rw):
         self.updated = False
         self.matchurlslash = re.compile("^(.*/)([^/].*?)$")
         self.matchurlcolon = re.compile("^(.*:)([^:].*?)$")
@@ -29,7 +29,7 @@ class Element:
         self.localpath = localpath
         self.url = url
         self._branch = branch
-        self.rwro = rwro
+        self.rw = rw
         self.update_fields()
 
     def check_fields(self):
@@ -112,15 +112,22 @@ class Configuration:
                 url = columns[1]
                 branch = columns[2]
                 if len(columns) == 4:
-                    rwro = columns[3]
+                    if columns[3] == "rw":
+                        rw = True
+                    else:
+                        rw = False
                 else:
-                    rwro = 'ro'
-                self.elements.append(Element(localpath, url, branch, rwro))
+                    rw = False
+                self.elements.append(Element(localpath, url, branch, rw))
         fp.close()
 
     def __str__(self):
         s = ""
         for e in self.elements:
-            s = s + e.localpath+" "+e.url+" "+e.branch+" "+e.rwro+"\n"
+            if self.rw:
+                rwro = "rw"
+            else:
+                rwro = "ro"
+            s = s + e.localpath+" "+e.url+" "+e.branch+" "+e.rw+"\n"
         return s
 
