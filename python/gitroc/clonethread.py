@@ -20,6 +20,7 @@
 import threading
 import queue
 import os
+import git
 
 class CloneThread(threading.Thread):
 
@@ -41,10 +42,20 @@ class CloneThread(threading.Thread):
         if os.path.islink("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname)):
             os.system("rm -f '%s/%s/%s'" % (self.ws.path, e.destsubdir, e.localname))
         if os.path.isdir("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname)):
-            retval = os.system("cd '%s/%s/%s' ; git fetch --tags ; git checkout %s" % (self.ws.path, e.destsubdir, e.localname, e.branch))
-            if retval == 0:
+            repo = git.Repo("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
+            repo.remotes['origin'].fetch()
+            origin = repo.remotes['origin']
+            try:
+                repo.create_head(e.branch, origin.refs[e.branch])
+                repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+                repo.heads[e.branch].checkout()
                 retval = os.system("cd '%s/%s/%s' ; git merge --ff-only" % (self.ws.path, e.destsubdir, e.localname))
+            except git.exc.GitCommandError:
+                print("Git error")
         else:
             os.system("mkdir -p '%s/%s'" % (self.ws.path, e.destsubdir))
-            os.system("cd '%s/%s' ; git clone %s %s" % (self.ws.path, e.destsubdir, e.url, e.localname))
-            os.system("cd '%s/%s/%s' ; git checkout %s" % (self.ws.path, e.destsubdir, e.localname, e.branch))
+            repo = git.Repo.clone_from(e.url, "%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
+            origin = repo.remotes['origin']
+            repo.create_head(e.branch, origin.refs[e.branch])
+            repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+            repo.heads[e.branch].checkout()
