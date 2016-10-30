@@ -43,8 +43,7 @@ class CloneThread(threading.Thread):
             os.system("rm -f '%s/%s/%s'" % (self.ws.path, e.destsubdir, e.localname))
         if os.path.isdir("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname)):
             repo = git.Repo("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
-            repo.remotes['origin'].fetch()
-            repo.remotes['origin'].fetch("refs/tags/*:refs/tags/*")
+            repo.remotes['origin'].fetch(["+refs/heads/*:refs/remotes/origin/*","+refs/tags/*:refs/tags/*"])
             origin = repo.remotes['origin']
             try:
                 if not e.branch in repo.heads:
