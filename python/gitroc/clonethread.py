@@ -48,10 +48,12 @@ class CloneThread(threading.Thread):
             ff_possible = False
             needs_stashing = False
             not_up_to_date = False
+            not_active_branch = False
             try:
                 if repo.is_dirty():
                     needs_stashing = True
-                if repo.active_branch != repo.heads['master']:
+                if repo.active_branch != repo.heads[e.branch]:
+                    not_active_branch = True
                     if not e.branch in repo.heads:
                         repo.create_head(e.branch, origin.refs[e.branch])
                         repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
@@ -63,7 +65,7 @@ class CloneThread(threading.Thread):
                 else:
                     not_up_to_date = True
                     print("not up to date")
-                if not_up_to_date:
+                if not_up_to_date or not_active_branch:
                     if needs_stashing:
                         repo.git.stash("save")
                     localref.checkout()
@@ -81,6 +83,7 @@ class CloneThread(threading.Thread):
                 except git.exc.GitCommandError as e:
                     print("Git error %s" % e)
 
+            if not_up_to_date or not_active_branch:
                 try:
                     if needs_stashing:
                         repo.git.stash("apply")
