@@ -19,3 +19,10 @@ Architecture: all
 Depends: ${misc:Depends}, python3-git
 Description: <insert up to 60 chars description>
  <insert long description, indented with spaces>
+
+Package: gitroc
+Architecture: all
+Depends: ${misc:Depends}, python3
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
