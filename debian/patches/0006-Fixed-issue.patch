@@ -1,0 +1,20 @@
+From: Ruben Undheim <ruben.undheim@gmail.com>
+Date: Sat, 5 Nov 2016 09:59:47 +0100
+Subject: Fixed issue
+
+---
+ python/gitrocd | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/python/gitrocd b/python/gitrocd
+index bf17cbf..275cb10 100755
+--- a/python/gitrocd
++++ b/python/gitrocd
+@@ -782,6 +782,7 @@ def signal_handler(signal, frame):
+ #getipsock.connect(("gmail.com", 80))
+ #myipaddress = str(getipsock.getsockname()[0])
+ #getipsock.close()
++myipaddress = "localhost"
+ 
+ 
+ worker_thread = []
