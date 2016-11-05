@@ -110,10 +110,21 @@ class CloneThread(threading.Thread):
             repo = git.Repo.clone_from(e.url, "%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
             origin = repo.remotes['origin']
             try:
-                if not e.branch in repo.heads:
-                    repo.create_head(e.branch, origin.refs[e.branch])
-                    repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
-                repo.heads[e.branch].checkout()
+                if e.branch[0:5] == "tags/":
+                    tagname = e.branch[5:]
+                else:
+                    tagname = e.branch
+                if tagname in repo.tags:
+                    istag = True
+                else:
+                    istag = False
+                if istag:
+                    repo.git.checkout(tagname)
+                else:
+                    if not e.branch in repo.heads:
+                        repo.create_head(e.branch, origin.refs[e.branch])
+                        repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+                    repo.heads[e.branch].checkout()
             except git.exc.GitCommandError as e:
                 print("Git error %s" % e)
         print("%s/%s/%s (RW)" % (self.ws.path, e.destsubdir, e.localname))
