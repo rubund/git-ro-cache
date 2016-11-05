@@ -1,0 +1,35 @@
+From: Ruben Undheim <ruben.undheim@gmail.com>
+Date: Sat, 5 Nov 2016 09:53:23 +0100
+Subject: Changed default value of fetch
+
+---
+ python/gitroc/client.py    | 2 +-
+ python/gitroc/workspace.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/python/gitroc/client.py b/python/gitroc/client.py
+index 4ff3c66..c28cba6 100644
+--- a/python/gitroc/client.py
++++ b/python/gitroc/client.py
+@@ -48,7 +48,7 @@ def recvall(sock, n):
+ 
+ 
+ class GitrocClient:
+-    def __init__(self, destdir=".", gitroc_server=None, fetch=False):
++    def __init__(self, destdir=".", gitroc_server=None, fetch=True):
+         self.basedir = destdir
+         if not gitroc_server: # If no server is given, use the local server
+             gitroc_server = "localhost"
+diff --git a/python/gitroc/workspace.py b/python/gitroc/workspace.py
+index 2c61d79..6686294 100644
+--- a/python/gitroc/workspace.py
++++ b/python/gitroc/workspace.py
+@@ -32,7 +32,7 @@ class Workspace:
+         self.nworkers = 8
+         pass
+ 
+-    def checkout(self, fetch=False):
++    def checkout(self, fetch=True):
+         c = client.GitrocClient(destdir=self.path, fetch=fetch)
+         for e in self.cfg.elements:
+             if e.rw:
