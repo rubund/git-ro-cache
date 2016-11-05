@@ -1,0 +1,53 @@
+From: Ruben Undheim <ruben.undheim@gmail.com>
+Date: Sat, 5 Nov 2016 09:17:00 +0100
+Subject: Listen to localhost
+
+---
+ python/gitroc/client.py |  5 +----
+ python/gitrocd          | 10 +++++-----
+ 2 files changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/python/gitroc/client.py b/python/gitroc/client.py
+index b130096..fef035e 100644
+--- a/python/gitroc/client.py
++++ b/python/gitroc/client.py
+@@ -51,10 +51,7 @@ class GitrocClient:
+     def __init__(self, destdir=".", gitroc_server=None):
+         self.basedir = destdir
+         if not gitroc_server: # If no server is given, use the local server
+-            getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+-            getipsock.connect(("gmail.com", 80))
+-            gitroc_server = str(getipsock.getsockname()[0])
+-            getipsock.close()
++            gitroc_server = "localhost"
+         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+         self.s.connect((gitroc_server, 19999))
+         self.number = 0
+diff --git a/python/gitrocd b/python/gitrocd
+index a8f507f..bed83d0 100755
+--- a/python/gitrocd
++++ b/python/gitrocd
+@@ -778,10 +778,10 @@ def signal_handler(signal, frame):
+         sys.exit(-1)
+     print("\nServer stopped\nPress enter")
+ 
+-getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+-getipsock.connect(("gmail.com", 80))
+-myipaddress = str(getipsock.getsockname()[0])
+-getipsock.close()
++#getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
++#getipsock.connect(("gmail.com", 80))
++#myipaddress = str(getipsock.getsockname()[0])
++#getipsock.close()
+ 
+ 
+ worker_thread = []
+@@ -793,7 +793,7 @@ for i in range(0, 4):
+         worker_thread.append(tmp)
+         tmp.start()
+ 
+-server_thread = listen_incoming(myipaddress)
++server_thread = listen_incoming("localhost")
+ 
+ cleanup_thread = CleanupThread()
+ cleanup_thread.start()
