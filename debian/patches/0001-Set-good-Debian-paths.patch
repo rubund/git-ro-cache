@@ -7,7 +7,7 @@ Subject: Set good Debian paths
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/python/gitrocd b/python/gitrocd
-index 5892b7e..bed83d0 100755
+index 183b9df..fa9ea4b 100755
 --- a/python/gitrocd
 +++ b/python/gitrocd
 @@ -36,9 +36,9 @@ import re
