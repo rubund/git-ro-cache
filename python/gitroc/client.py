@@ -48,7 +48,7 @@ def recvall(sock, n):
 
 
 class GitrocClient:
-    def __init__(self, destdir=".", gitroc_server=None):
+    def __init__(self, destdir=".", gitroc_server=None, fetch=False):
         self.basedir = destdir
         if not gitroc_server: # If no server is given, use the local server
             gitroc_server = "localhost"
@@ -57,6 +57,7 @@ class GitrocClient:
         self.number = 0
         self.destsubdir = {}
         self.localname = {}
+        self.fetch = fetch
 
     def request_url(self, fullurl, localname=None, branch="master", destsubdir=""):
         url = ""
@@ -70,7 +71,10 @@ class GitrocClient:
         data['reponame'] = reponame+""+suffix
         data['url'] = url
         data['commit'] = branch
-        data['mode'] = 0
+        if self.fetch:
+            data['mode'] = 0
+        else:
+            data['mode'] = 1
         data['number'] = self.number
         data['version'] = 2
         jsondata = json.dumps(data)
