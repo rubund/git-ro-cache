@@ -1,0 +1,38 @@
+From: Ruben Undheim <ruben.undheim@gmail.com>
+Date: Sat, 5 Nov 2016 19:53:20 +0100
+Subject: Also work for newly cloned ones
+
+---
+ python/gitroc/clonethread.py | 19 +++++++++++++++----
+ 1 file changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/python/gitroc/clonethread.py b/python/gitroc/clonethread.py
+index 38c7b10..8464218 100644
+--- a/python/gitroc/clonethread.py
++++ b/python/gitroc/clonethread.py
+@@ -110,10 +110,21 @@ class CloneThread(threading.Thread):
+             repo = git.Repo.clone_from(e.url, "%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
+             origin = repo.remotes['origin']
+             try:
+-                if not e.branch in repo.heads:
+-                    repo.create_head(e.branch, origin.refs[e.branch])
+-                    repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+-                repo.heads[e.branch].checkout()
++                if e.branch[0:5] == "tags/":
++                    tagname = e.branch[5:]
++                else:
++                    tagname = e.branch
++                if tagname in repo.tags:
++                    istag = True
++                else:
++                    istag = False
++                if istag:
++                    repo.git.checkout(tagname)
++                else:
++                    if not e.branch in repo.heads:
++                        repo.create_head(e.branch, origin.refs[e.branch])
++                        repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
++                    repo.heads[e.branch].checkout()
+             except git.exc.GitCommandError as e:
+                 print("Git error %s" % e)
+         print("%s/%s/%s (RW)" % (self.ws.path, e.destsubdir, e.localname))
