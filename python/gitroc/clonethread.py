@@ -65,7 +65,7 @@ class CloneThread(threading.Thread):
                     not_up_to_date = False
                     not_active_branch = True
                 else:
-                    if repo.active_branch != repo.heads[e.branch]:
+                    if repo.head.is_detached or repo.active_branch != repo.heads[e.branch]:
                         not_active_branch = True
                         if not e.branch in repo.heads:
                             repo.create_head(e.branch, origin.refs[e.branch])
