@@ -32,7 +32,7 @@ class Workspace:
         self.nworkers = 8
         pass
 
-    def checkout(self, fetch=False):
+    def checkout(self, fetch=True):
         c = client.GitrocClient(destdir=self.path, fetch=fetch)
         for e in self.cfg.elements:
             if e.rw:

@@ -48,7 +48,7 @@ def recvall(sock, n):
 
 
 class GitrocClient:
-    def __init__(self, destdir=".", gitroc_server=None, fetch=False):
+    def __init__(self, destdir=".", gitroc_server=None, fetch=True):
         self.basedir = destdir
         if not gitroc_server: # If no server is given, use the local server
             gitroc_server = "localhost"
