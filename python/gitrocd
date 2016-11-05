@@ -407,7 +407,7 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
             istag = False
         rowrevparse = None
         notfoundindb = False
-        if istag and mode == 1:
+        if istag:
             dblock.acquire()
             check_if_db_open()
             cursor.execute(
