@@ -32,8 +32,8 @@ class Workspace:
         self.nworkers = 8
         pass
 
-    def checkout(self):
-        c = client.GitrocClient(destdir=self.path)
+    def checkout(self, fetch=True):
+        c = client.GitrocClient(destdir=self.path, fetch=fetch)
         for e in self.cfg.elements:
             if e.rw:
                 self.rwqueue.put(e)

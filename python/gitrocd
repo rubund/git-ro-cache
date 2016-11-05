@@ -228,6 +228,21 @@ git cat-file -p %s
             rev = commitrev
     return rev
 
+def is_tag(urlstr, reponame, branch):
+    if branch[0:5] == "tags/":
+        branch = branch[5:]
+    command = """
+umask %s
+cd %s/%s/%s
+git show-ref --verify refs/tags/%s
+""" % (umask, cachearea, urlstr, reponame, branch)
+    try:
+        rev = subprocess.check_output(
+            command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
 
 def git_fetch(urlstr, reponame):
     command = """
@@ -401,23 +416,24 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
                 unlock_repo(reponame+""+suffix)
                 return
 
-        if branch[0:5] == "tags/":
-            istag = True
-        else:
-            istag = False
         rowrevparse = None
         notfoundindb = False
-        if istag and mode == 1:
-            dblock.acquire()
-            check_if_db_open()
-            cursor.execute(
-                "select id, git_commit, istag from gitroc_revparse where git_branch=? and git_reponame=? and git_url=? limit 1", (branch, reponame, url))
-            rowrevparse = cursor.fetchone()
-            dblock.release()
-            if rowrevparse == None:
-                notfoundindb = True
 
+        istag = False
+        dblock.acquire()
+        check_if_db_open()
+        cursor.execute(
+            "select id, git_commit, istag from gitroc_revparse where git_branch=? and git_reponame=? and git_url=? limit 1", (branch, reponame, url))
+        rowrevparse = cursor.fetchone()
+        dblock.release()
         if rowrevparse == None:
+            notfoundindb = True
+            istag = is_tag(urlstr, reponame+""+suffix, branch)
+        else:
+            istag = rowrevparse[2]
+
+
+        if rowrevparse == None or not istag: # If not tag, always do this
             rev = rev_parse(urlstr, reponame+""+suffix, branch)
         else:
             rev = rowrevparse[1]
@@ -436,7 +452,7 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
             if rev == "":
                 raise CannotFindError
         else:              # Has found reference, but maybe needs to update
-            if (mode != 1 and 'tags/' not in branch) or action == "fetchonly":
+            if (mode != 1 and not istag) or action == "fetchonly":
                 justupdated = just_updated(url, reponame, rev)
                 if not justupdated or action == "fetchonly":
                     git_fetch(urlstr, reponame+""+suffix)
@@ -444,7 +460,7 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
             if rev == "":
                 raise CannotFindError
 
-        if notfoundindb:
+        if notfoundindb and istag: # only store tags in database
             nowtime = datetime.datetime.now()
             dblock.acquire()
             check_if_db_open()
@@ -782,6 +798,7 @@ def signal_handler(signal, frame):
 #getipsock.connect(("gmail.com", 80))
 #myipaddress = str(getipsock.getsockname()[0])
 #getipsock.close()
+myipaddress = "localhost"
 
 
 worker_thread = []
