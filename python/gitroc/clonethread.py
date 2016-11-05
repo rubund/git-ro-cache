@@ -43,16 +43,52 @@ class CloneThread(threading.Thread):
             os.system("rm -f '%s/%s/%s'" % (self.ws.path, e.destsubdir, e.localname))
         if os.path.isdir("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname)):
             repo = git.Repo("%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))
-            repo.remotes['origin'].fetch()
+            repo.remotes['origin'].fetch(["+refs/heads/*:refs/remotes/origin/*","+refs/tags/*:refs/tags/*"])
             origin = repo.remotes['origin']
+            ff_possible = False
+            needs_stashing = False
+            not_up_to_date = False
+            not_active_branch = False
             try:
-                if not e.branch in repo.heads:
-                    repo.create_head(e.branch, origin.refs[e.branch])
-                    repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
-                repo.heads[e.branch].checkout()
-                repo.git.merge("--ff-only")
+                if repo.is_dirty():
+                    needs_stashing = True
+                if repo.active_branch != repo.heads[e.branch]:
+                    not_active_branch = True
+                    if not e.branch in repo.heads:
+                        repo.create_head(e.branch, origin.refs[e.branch])
+                        repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+                localref = repo.heads[e.branch]
+                remoteref = repo.remotes.origin.refs[e.branch]
+                common_ancestor = repo.merge_base(remoteref, localref)
+                if len(common_ancestor) > 0 and common_ancestor[0] == remoteref.commit:
+                    pass
+                else:
+                    not_up_to_date = True
+                    print("not up to date")
+                if not_up_to_date or not_active_branch:
+                    if needs_stashing:
+                        repo.git.stash("save")
+                    localref.checkout()
+                    if len(common_ancestor) > 0 and common_ancestor[0] == localref.commit:
+                        ff_possible = True
             except git.exc.GitCommandError as e:
                 print("Git error %s" % e)
+
+            if not_up_to_date:
+                try:
+                    if ff_possible:
+                        repo.git.merge("--ff-only")
+                    else:
+                        repo.git.rebase("origin/%s" % (e.branch))
+                except git.exc.GitCommandError as e:
+                    print("Git error %s" % e)
+
+            if not_up_to_date or not_active_branch:
+                try:
+                    if needs_stashing:
+                        repo.git.stash("apply")
+                except git.exc.GitCommandError as e:
+                    print("Git error %s" % e)
         else:
             os.system("mkdir -p '%s/%s'" % (self.ws.path, e.destsubdir))
             repo = git.Repo.clone_from(e.url, "%s/%s/%s" % (self.ws.path, e.destsubdir, e.localname))

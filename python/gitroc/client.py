@@ -51,10 +51,7 @@ class GitrocClient:
     def __init__(self, destdir=".", gitroc_server=None):
         self.basedir = destdir
         if not gitroc_server: # If no server is given, use the local server
-            getipsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            getipsock.connect(("gmail.com", 80))
-            gitroc_server = str(getipsock.getsockname()[0])
-            getipsock.close()
+            gitroc_server = "localhost"
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((gitroc_server, 19999))
         self.number = 0
