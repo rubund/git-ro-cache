@@ -52,25 +52,41 @@ class CloneThread(threading.Thread):
             try:
                 if repo.is_dirty():
                     needs_stashing = True
-                if repo.active_branch != repo.heads[e.branch]:
-                    not_active_branch = True
-                    if not e.branch in repo.heads:
-                        repo.create_head(e.branch, origin.refs[e.branch])
-                        repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
-                localref = repo.heads[e.branch]
-                remoteref = repo.remotes.origin.refs[e.branch]
-                common_ancestor = repo.merge_base(remoteref, localref)
-                if len(common_ancestor) > 0 and common_ancestor[0] == remoteref.commit:
-                    pass
+                if e.branch[0:5] == "tags/":
+                    tagname = e.branch[5:]
                 else:
-                    not_up_to_date = True
-                    print("not up to date")
+                    tagname = e.branch
+
+                if tagname in repo.tags:
+                    istag = True
+                else:
+                    istag = False
+                if istag:
+                    not_up_to_date = False
+                    not_active_branch = True
+                else:
+                    if repo.active_branch != repo.heads[e.branch]:
+                        not_active_branch = True
+                        if not e.branch in repo.heads:
+                            repo.create_head(e.branch, origin.refs[e.branch])
+                            repo.heads[e.branch].set_tracking_branch(origin.refs[e.branch])
+                    localref = repo.heads[e.branch]
+                    remoteref = repo.remotes.origin.refs[e.branch]
+                    common_ancestor = repo.merge_base(remoteref, localref)
+                    if len(common_ancestor) > 0 and common_ancestor[0] == remoteref.commit:
+                        pass
+                    else:
+                        not_up_to_date = True
+                        print("not up to date")
                 if not_up_to_date or not_active_branch:
                     if needs_stashing:
                         repo.git.stash("save")
-                    localref.checkout()
-                    if len(common_ancestor) > 0 and common_ancestor[0] == localref.commit:
-                        ff_possible = True
+                    if istag:
+                        repo.git.checkout(tagname)
+                    else:
+                        localref.checkout()
+                        if len(common_ancestor) > 0 and common_ancestor[0] == localref.commit:
+                            ff_possible = True
             except git.exc.GitCommandError as e:
                 print("Git error %s" % e)
 
