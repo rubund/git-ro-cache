@@ -1,0 +1,21 @@
+From: Ruben Undheim <ruben.undheim@gmail.com>
+Date: Sat, 5 Nov 2016 19:59:55 +0100
+Subject: Check if head is detached first
+
+---
+ python/gitroc/clonethread.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/python/gitroc/clonethread.py b/python/gitroc/clonethread.py
+index 8464218..281830a 100644
+--- a/python/gitroc/clonethread.py
++++ b/python/gitroc/clonethread.py
+@@ -65,7 +65,7 @@ class CloneThread(threading.Thread):
+                     not_up_to_date = False
+                     not_active_branch = True
+                 else:
+-                    if repo.active_branch != repo.heads[e.branch]:
++                    if repo.head.is_detached or repo.active_branch != repo.heads[e.branch]:
+                         not_active_branch = True
+                         if not e.branch in repo.heads:
+                             repo.create_head(e.branch, origin.refs[e.branch])

@@ -1,2 +1,3 @@
 0001-Set-good-Debian-paths.patch
 0002-Also-work-for-newly-cloned-ones.patch
+0003-Check-if-head-is-detached-first.patch
