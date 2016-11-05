@@ -782,6 +782,7 @@ def signal_handler(signal, frame):
 #getipsock.connect(("gmail.com", 80))
 #myipaddress = str(getipsock.getsockname()[0])
 #getipsock.close()
+myipaddress = "localhost"
 
 
 worker_thread = []
