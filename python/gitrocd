@@ -384,6 +384,36 @@ def check_if_db_open():
             dbpath, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
         cursor = conn.cursor()
 
+def get_current_branches(urlstr, reponame):
+    command = """
+umask %s
+cd %s/%s/%s
+git branch | tr '*' ' '
+""" % (umask, cachearea, urlstr, reponame)
+    try:
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()
+    except subprocess.CalledProcessError:
+        return []
+    branches = []
+    lines = output.split('\n')
+    for l in lines:
+        branches.append(l.strip())
+    return branches
+
+def remove_branches(urlstr, reponame, branches):
+    try:
+        cmd = ""
+        first = True
+        for b in branches:
+            if first:
+                first = False
+                cmd = cmd + "git branch -D %s" % (b)
+            else:
+                cmd = cmd + "; git branch -D %s" % (b)
+        command = "umask %s ; cd %s/%s/%s ; %s" % (umask, cachearea, urlstr, reponame, cmd)
+        subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+    except subprocess.CalledProcessError:
+        pass
 
 def handle_one(number, action, version, url, reponame, branch, clientqueue, mode, requestedtime, afterpath, regenerate_cache_entry=False):
     urlstr = base64.urlsafe_b64encode(url.encode('utf-8')).decode('utf-8')
@@ -405,6 +435,12 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
             clone_repo(url, urlstr, reponame, version=version)
             if(not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix))):
                 raise CannotFindError
+        elif action == "fetchonly":
+            current_branches = get_current_branches(urlstr, reponame+""+suffix)
+            remove_branches(urlstr, reponame+""+suffix, current_branches) # remove all branches
+            git_fetch(urlstr, reponame+""+suffix) # then re-fetch all branches
+            unlock_repo(reponame+""+suffix)
+            return
 
         if row == None and is_empty_repo(urlstr, reponame+""+suffix):
             git_fetch(urlstr, reponame+""+suffix)
