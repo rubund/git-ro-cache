@@ -435,7 +435,9 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
             clone_repo(url, urlstr, reponame, version=version)
             if(not os.path.isdir("%s/%s/%s%s" % (cachearea, urlstr, reponame, suffix))):
                 raise CannotFindError
+            os.system("cd %s/%s/%s%s ; git symbolic-ref HEAD refs/heads/THIS_IS_ONLY_CACHE" % (cachearea, urlstr, reponame, suffix))
         elif action == "fetchonly":
+            os.system("cd %s/%s/%s%s ; git symbolic-ref HEAD refs/heads/THIS_IS_ONLY_CACHE" % (cachearea, urlstr, reponame, suffix))
             current_branches = get_current_branches(urlstr, reponame+""+suffix)
             remove_branches(urlstr, reponame+""+suffix, current_branches) # remove all branches
             git_fetch(urlstr, reponame+""+suffix) # then re-fetch all branches
