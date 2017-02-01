@@ -561,6 +561,41 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
         unlock_repo(reponame)
 
 
+def mqtt_publish(ipaddr, port, topic, message):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(1)
+    try:
+        s.connect((ipaddr, port))
+
+        msg_type = 0x10 # Connect
+        client_identifier = "gitrocache-dogit"
+        client_identifier_length_field = bytes([len(client_identifier)])
+        content = bytes([0x00, 0x06, 0x4d, 0x51, 0x49, 0x73, 0x64, 0x70, 0x03, 0x02, 0x00, 0x3c, 0x00]) + client_identifier_length_field + client_identifier.encode('utf-8')
+        msg_len = bytes([len(content)])
+        msg = bytes([msg_type]) + msg_len + content
+        s.send(msg)
+
+        msg_type = 0x30 # Publish
+        topic_length_field = bytes([len(topic)])
+        content = bytes([0x00]) + topic_length_field + topic.encode('utf-8') + message.encode('utf-8')
+        msg_len = bytes([len(content)])
+        msg = bytes([msg_type]) + msg_len + content
+
+        s.send(msg)
+        s.close()
+
+    except ConnectionRefusedError:
+        print("Failed publishing to MQTT broker. Ignore failure")
+        pass
+    except BrokenPipeError:
+        print("Connection to MQTT broker closed before it got the chance to send")
+        pass
+    except OSError:
+        print("Could not reach MQTT broker")
+        pass
+
+
+
 class WorkerThread(threading.Thread):
 
     def __init__(self, q):
