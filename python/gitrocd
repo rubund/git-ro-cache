@@ -576,9 +576,23 @@ def mqtt_publish(ipaddr, port, topic, message):
         s.send(msg)
 
         msg_type = 0x30 # Publish
-        topic_length_field = bytes([len(topic)])
-        content = bytes([0x00]) + topic_length_field + topic.encode('utf-8') + message.encode('utf-8')
-        msg_len = bytes([len(content)])
+        lentopic = len(topic)
+        lentopic_msb = int(lentopic / 256)
+        lentopic_lsb = lentopic % 256
+        topic_length_field = bytes([lentopic_msb, lentopic_lsb])
+        content = topic_length_field + topic.encode('utf-8') + message.encode('utf-8')
+        lenmsg = len(content)
+        if lenmsg > 1000:
+            content = content[0:1000]
+            lenmsg = 1000
+
+        msg_len = bytes([])
+        while lenmsg > 0:
+            digit = lenmsg % 128
+            lenmsg = int(lenmsg / 128)
+            if lenmsg > 0:
+                digit = digit | 0x80
+            msg_len = msg_len + bytes([digit])
         msg = bytes([msg_type]) + msg_len + content
 
         s.send(msg)
@@ -593,6 +607,11 @@ def mqtt_publish(ipaddr, port, topic, message):
     except OSError:
         print("Could not reach MQTT broker")
         pass
+    except Exception:
+        print("Other unknown Exception in MQTT publish function")
+        pass
+    sys.stdout.flush()
+    sys.stderr.flush()
 
 
 
