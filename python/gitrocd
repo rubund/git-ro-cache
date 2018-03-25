@@ -32,6 +32,7 @@ import datetime
 import struct
 import signal
 import re
+import shlex
 
 debug = False
 old_db_style = False
@@ -137,11 +138,12 @@ def send_msg(sock, msg):
 def lock_repo(reponame):
     available = False
     while not available:
+        lock_path = "".join([lockarea,"/",reponame,".lock"])
         glock.acquire()
-        if not os.path.isfile("%s/%s.lock" % (lockarea, reponame)):
+        if not os.path.isfile(lock_path):
             available = True
-            os.system("mkdir -p %s && touch %s/%s.lock" %
-                      (lockarea, lockarea, reponame))
+            os.system("mkdir -p %s && touch %s" %
+                      (shlex.quote(lockarea), shlex.quote(lock_path)))
             glock.release()
             break
         glock.release()
@@ -149,20 +151,24 @@ def lock_repo(reponame):
 
 
 def unlock_repo(reponame):
+    lock_path = "".join([lockarea,"/",reponame,".lock"])
     glock.acquire()
-    os.system("rm -f %s/%s.lock" % (lockarea, reponame))
+    os.system("rm -f %s" % (shlex.quote(lock_path)))
     glock.release()
 
 
 def clone_repo(url, urlstr, reponame, version=1):
+    full_path = "".join([cachearea,"/",urlstr])
+    full_url = "".join([url, reponame])
+    full_path_quoted = shlex.quote(full_path)
     command = """
 umask %s
-mkdir -p %s/%s
-cd %s/%s
-GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git clone --bare %s%s %s
+mkdir -p %s
+cd %s
+GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git clone --bare %s %s
 cd %s
 git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
-""" % (umask, cachearea, urlstr, cachearea, urlstr, url, reponame, reponame, reponame)
+""" % (umask, full_path_quoted, full_path_quoted, shlex.quote(full_url), shlex.quote(reponame), shlex.quote(reponame))
     if debug:
         print(command)
         os.system(command)
@@ -175,10 +181,11 @@ git config --local remote.origin.fetch "+refs/heads/*:refs/heads/*"
 
 
 def is_empty_repo(urlstr, reponame):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     command = """
-cd %s/%s/%s
+cd %s
 git show-ref > /dev/null
-"""  % (cachearea, urlstr, reponame)
+"""  % (shlex.quote(full_path))
     try:
         subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError:
@@ -187,11 +194,12 @@ git show-ref > /dev/null
 
 
 def rev_parse(urlstr, reponame, branch):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     command = """
 umask %s
-cd %s/%s/%s
+cd %s
 git rev-parse %s
-""" % (umask, cachearea, urlstr, reponame, branch)
+""" % (umask, shlex.quote(full_path), shlex.quote(branch))
     if debug:
         print(command)
     try:
@@ -202,9 +210,9 @@ git rev-parse %s
 
     if rev == branch:
         command = """
-cd %s/%s/%s
+cd %s
 git cat-file -p %s
-""" % (cachearea, urlstr, reponame, branch)
+""" % (shlex.quote(full_path), shlex.quote(branch))
         istag = False
         commitrev = ""
         try:
@@ -225,13 +233,14 @@ git cat-file -p %s
     return rev
 
 def is_tag(urlstr, reponame, branch):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     if branch[0:5] == "tags/":
         branch = branch[5:]
     command = """
 umask %s
-cd %s/%s/%s
+cd %s
 git show-ref --verify refs/tags/%s
-""" % (umask, cachearea, urlstr, reponame, branch)
+""" % (umask, shlex.quote(full_path), shlex.quote(branch))
     try:
         rev = subprocess.check_output(
             command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
@@ -241,11 +250,12 @@ git show-ref --verify refs/tags/%s
 
 
 def git_fetch(urlstr, reponame):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     command = """
 umask %s
-cd %s/%s/%s
+cd %s
 git fetch --tags --all
-""" % (umask, cachearea, urlstr, reponame)
+""" % (umask, shlex.quote(full_path))
     if debug:
         print(command)
         os.system(command)
@@ -258,14 +268,15 @@ git fetch --tags --all
 
 
 def commit_exists(urlstr, reponame, rev):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     if debug:
         print(rev)
     command = """
 umask %s
-cd %s/%s/%s
+cd %s
 git rev-list --all --remotes | grep -q %s
 echo $?
-""" % (umask, cachearea, urlstr, reponame, rev)
+""" % (umask, shlex.quote(full_path), shlex.quote(rev))
     if debug:
         print(command)
     missing = int(subprocess.check_output(
@@ -274,13 +285,16 @@ echo $?
 
 
 def splitout(urlstr, reponame, rev):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
+    cache_url = "".join(["cache/", rev])
+    full_cache_url = "".join([full_path,"/",cache_url])
     command = """
 umask %s
-cd %s/%s/%s
-mkdir -p cache/%s
-chmod -R u+w cache/%s
-git archive %s | tar -x -C cache/%s
-""" % (umask, cachearea, urlstr, reponame, rev, rev, rev, rev)
+cd %s
+mkdir -p %s
+chmod -R u+w %s
+git archive %s | tar -x -C %s
+""" % (umask, shlex.quote(full_path), shlex.quote(cache_url), shlex.quote(cache_url), shlex.quote(rev), shlex.quote(cache_url))
     if debug:
         print(command)
         os.system(command)
@@ -294,13 +308,13 @@ git archive %s | tar -x -C cache/%s
     retmain = 0
     if retmain == 0:
         command = """
-cd %s/%s/%s
-chmod -R a-w cache/%s
-""" % (cachearea, urlstr, reponame, rev)
+cd %s
+chmod -R a-w %s
+""" % (shlex.quote(full_path), shlex.quote(cache_url))
     else:  # If failed, delete cache version
         command = """
-rm -rf %s/%s/%s/cache/%s
-""" % (cachearea, urlstr, reponame, rev)
+rm -rf %s
+""" % (shlex.quote(full_cache_url))
     os.system(command)
     return retmain
 
@@ -321,13 +335,14 @@ class CleanupThread(threading.Thread):
             rows = cursor.fetchall()
             dblock.release()
             for row in rows:
+                full_cache_url = "".join([cachearea,"/",urlstr,"/",row[2],"/cache/",row[3]])
                 urlstr = base64.urlsafe_b64encode(
                     row[1].encode('utf-8')).decode('utf-8')
                 lock_repo(row[2])
                 command = """
-chmod -R u+w %s/%s/%s/cache/%s
-rm -rf %s/%s/%s/cache/%s
-""" % (cachearea, urlstr, row[2], row[3], cachearea, urlstr, row[2], row[3])
+chmod -R u+w %s
+rm -rf %s
+""" % (shlex.quote(full_cache_url), shlex.quote(full_cache_url))
                 print(command)
                 os.system(command)
                 unlock_repo(row[2])
@@ -377,11 +392,12 @@ def check_if_db_open():
         cursor = conn.cursor()
 
 def get_current_branches(urlstr, reponame):
+    full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     command = """
 umask %s
-cd %s/%s/%s
+cd %s
 git branch | tr '*' ' '
-""" % (umask, cachearea, urlstr, reponame)
+""" % (umask, shlex.quote(full_path))
     try:
         output = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()
     except subprocess.CalledProcessError:
@@ -399,10 +415,11 @@ def remove_branches(urlstr, reponame, branches):
         for b in branches:
             if first:
                 first = False
-                cmd = cmd + "git branch -D %s" % (b)
+                cmd = cmd + "git branch -D %s" % (shlex.quote(b))
             else:
-                cmd = cmd + "; git branch -D %s" % (b)
-        command = "umask %s ; cd %s/%s/%s ; %s" % (umask, cachearea, urlstr, reponame, cmd)
+                cmd = cmd + "; git branch -D %s" % (shlex.quote(b))
+        full_path = "".join([cachearea,"/",urlstr,"/",reponame])
+        command = "umask %s ; cd %s ; %s" % (umask, shlex.quote(full_path), cmd)
         subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError:
         pass
@@ -419,13 +436,15 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
         row = cursor.fetchone()
         dblock.release()
 
-        if row == None and not os.path.isdir("%s/%s/%s" % (cachearea, urlstr, reponame)):
+        full_path = "".join([cachearea,"/",urlstr,"/",reponame])
+
+        if row == None and not os.path.isdir(full_path):
             clone_repo(url, urlstr, reponame, version=version)
-            if(not os.path.isdir("%s/%s/%s" % (cachearea, urlstr, reponame))):
+            if(not os.path.isdir(full_path)):
                 raise CannotFindError
-            os.system("cd %s/%s/%s ; git symbolic-ref HEAD refs/heads/THIS_IS_ONLY_CACHE" % (cachearea, urlstr, reponame))
+            os.system("cd %s ; git symbolic-ref HEAD refs/heads/THIS_IS_ONLY_CACHE" % (shlex.quote(full_path)))
         elif action == "fetchonly":
-            os.system("cd %s/%s/%s ; git symbolic-ref HEAD refs/heads/THIS_IS_ONLY_CACHE" % (cachearea, urlstr, reponame))
+            os.system("cd %s ; git symbolic-ref HEAD refs/heads/THIS_IS_ONLY_CACHE" % (shlex.quote(full_path)))
             current_branches = get_current_branches(urlstr, reponame)
             remove_branches(urlstr, reponame, current_branches) # remove all branches
             git_fetch(urlstr, reponame) # then re-fetch all branches
@@ -435,10 +454,10 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
         if row == None and is_empty_repo(urlstr, reponame):
             git_fetch(urlstr, reponame)
             if is_empty_repo(urlstr, reponame):
-                os.system("mkdir -p %s/%s/%s/cache/empty" %
-                          (cachearea, urlstr, reponame))
-                clientqueue.put((-6, number, '%s/%s/%s/cache/empty' %
-                                (cachearea, urlstr, reponame), reponame, "empty", "empty"))
+                full_cache_path = "".join([full_path,"/cache/empty"])
+                os.system("mkdir -p %s" %
+                          (shlex.quote(full_cache_path)))
+                clientqueue.put((-6, number, full_cache_path, reponame, "empty", "empty"))
                 unlock_repo(reponame)
                 return
 
@@ -503,12 +522,13 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
         if rev == "":
             raise CannotFindError
 
+        full_cache_path = "".join([full_path,"/cache/",rev])
         if regenerate_cache_entry:
-            if os.path.isdir("%s/%s/%s/cache/%s" % (cachearea, urlstr, reponame, rev)):
-                os.system("chmod -R u+w %s/%s/%s/cache/%s" %
-                          (cachearea, urlstr, reponame, rev))
-                os.system("rm -rf %s/%s/%s/cache/%s" %
-                          (cachearea, urlstr, reponame, rev))
+            if os.path.isdir(full_cache_path):
+                os.system("chmod -R u+w %s" %
+                          (shlex.quote(full_cache_path)))
+                os.system("rm -rf %s" %
+                          (shlex.quote(full_cache_path)))
 
             dblock.acquire()
             check_if_db_open()
@@ -524,14 +544,14 @@ def handle_one(number, action, version, url, reponame, branch, clientqueue, mode
             dblock.release()
 
         if action == "process":
-            if os.path.isdir("%s/%s/%s/cache/%s" % (cachearea, urlstr, reponame, rev)):
+            if os.path.isdir(full_cache_path):
                 retmain = 0
                 if debug:
                     print("Already exists")
             else:
                 retmain = splitout(urlstr, reponame, rev)
-            clientqueue.put((retmain, number, '%s/%s/%s/cache/%s%s' %
-                            (cachearea, urlstr, reponame, rev, afterpath), reponame, branch, rev))
+            full_after_path = "".join([full_cache_path,afterpath])
+            clientqueue.put((retmain, number, full_after_path, reponame, branch, rev))
 
         unlock_repo(reponame)
         if not justupdated and action == "process":
