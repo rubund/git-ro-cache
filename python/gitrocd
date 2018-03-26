@@ -711,13 +711,15 @@ class ClientHandler(threading.Thread):
                             branch = data['commit']
                         else:
                             branch = 'master'
+                        if ".." in branch or " " in branch:
+                            raise MissingArgumentError
                         if 'version' in data:
                             version = (int(data['version']))
                         else:
                             version = 1
                         if not 'url' in data:
                             raise MissingArgumentError
-                        if not 'reponame' in data:
+                        if not 'reponame' in data or ".." in data['reponame'] or "/" in data['reponame']:
                             raise MissingArgumentError
                         if not 'mode' in data:
                             raise MissingArgumentError
