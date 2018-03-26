@@ -336,9 +336,9 @@ class CleanupThread(threading.Thread):
             rows = cursor.fetchall()
             dblock.release()
             for row in rows:
-                full_cache_url = "".join([cachearea,"/",urlstr,"/",row[2],"/cache/",row[3]])
                 urlstr = base64.urlsafe_b64encode(
                     row[1].encode('utf-8')).decode('utf-8')
+                full_cache_url = "".join([cachearea,"/",urlstr,"/",row[2],"/cache/",row[3]])
                 lock_repo(row[2])
                 command = """
 chmod -R u+w %s
