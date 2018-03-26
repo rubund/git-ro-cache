@@ -236,11 +236,12 @@ def is_tag(urlstr, reponame, branch):
     full_path = "".join([cachearea,"/",urlstr,"/",reponame])
     if branch[0:5] == "tags/":
         branch = branch[5:]
+    refstr = "".join(["refs/tags/",branch])
     command = """
 umask %s
 cd %s
-git show-ref --verify refs/tags/%s
-""" % (umask, shlex.quote(full_path), shlex.quote(branch))
+git show-ref --verify %s
+""" % (umask, shlex.quote(full_path), shlex.quote(refstr))
     try:
         rev = subprocess.check_output(
             command, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
