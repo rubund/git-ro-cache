@@ -711,7 +711,7 @@ class ClientHandler(threading.Thread):
                             branch = data['commit']
                         else:
                             branch = 'master'
-                        if ".." in branch or " " in branch:
+                        if not isinstance(branch, str) or ".." in branch or " " in branch:
                             raise MissingArgumentError
                         if 'version' in data:
                             version = (int(data['version']))
@@ -719,7 +719,13 @@ class ClientHandler(threading.Thread):
                             version = 1
                         if not 'url' in data:
                             raise MissingArgumentError
-                        if not 'reponame' in data or ".." in data['reponame'] or "/" in data['reponame']:
+                        url = data['url']
+                        if not isinstance(url, str) or ".." in url:
+                            raise MissingArgumentError
+                        if not 'reponame' in data:
+                            raise MissingArgumentError
+                        reponame = data['reponame']
+                        if not isinstance(reponame, str) or ".." in reponame or "/" in reponame:
                             raise MissingArgumentError
                         if not 'mode' in data:
                             raise MissingArgumentError
@@ -728,12 +734,10 @@ class ClientHandler(threading.Thread):
                         else:
                             number = -1
                         mode = data['mode']
-                        reponame = data['reponame']
-                        url = data['url']
                         nowtime = datetime.datetime.now()
                         if 'afterpath' in data:
                             afterpath = data['afterpath']
-                            if ".." in afterpath: # Do not allow ".." in afterpath
+                            if not isinstance(afterpath, str) or ".." in afterpath: # Do not allow ".." in afterpath
                                 afterpath = ""
                             elif len(afterpath) > 0 and afterpath[0] != '/':
                                 afterpath = "/%s" % (afterpath)
