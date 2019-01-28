@@ -138,11 +138,18 @@ class CannotFindError(BaseException):
         ""
 
 def recv_msg(sock):
-    raw_msglen = sock.recv(4)
-    if not raw_msglen:
-        return None
-    msglen = struct.unpack('>I', raw_msglen)[0]
-    return recvall(sock, msglen)
+    first = sock.recv(1)
+    if first == b'{': # If present, expect old-style
+      remaining = sock.recv(5000)
+      fullmsg = first + remaining
+      return fullmsg.decode('utf-8')
+    else:
+      raw_msglen_end = sock.recv(3)
+      if not raw_msglen_end:
+          return None
+      raw_msglen = first + raw_msglen_end
+      msglen = struct.unpack('>I', raw_msglen)[0]
+      return recvall(sock, msglen)
 
 
 def recvall(sock, n):
