@@ -44,7 +44,18 @@ def recvall(sock, n):
         data += packet.decode('utf-8')
     return data
 
-
+def send_msg(sock, msg):
+    msg = struct.pack('>I', len(msg)) + msg
+    partsize = 1000
+    n = 0
+    while len(msg) > n:
+        if len(msg) > n + partsize:
+            thissize = partsize
+        else:
+            thissize = len(msg) - n
+        part = msg[n:n + thissize]
+        n = n + thissize
+        sock.send(part)
 
 
 class GitrocClient:
@@ -78,7 +89,7 @@ class GitrocClient:
         data['number'] = self.number
         data['version'] = 2
         jsondata = json.dumps(data)
-        self.s.send(jsondata.encode('utf-8'))
+        send_msg(self.s, jsondata.encode('utf-8'))
         resp = recv_msg(self.s)
         self.destsubdir[self.number] = destsubdir
         if not localname:
@@ -106,7 +117,7 @@ class GitrocClient:
         data = {}
         data['command'] = command
         jsondata = json.dumps(data)
-        self.s.send(jsondata.encode('utf-8'))
+        send_msg(self.s, jsondata.encode('utf-8'))
 
         resp = recv_msg(self.s)
         recv_jsondata = json.loads(resp)

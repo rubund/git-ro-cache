@@ -137,6 +137,23 @@ class CannotFindError(BaseException):
     def __init(self):
         ""
 
+def recv_msg(sock):
+    raw_msglen = sock.recv(4)
+    if not raw_msglen:
+        return None
+    msglen = struct.unpack('>I', raw_msglen)[0]
+    return recvall(sock, msglen)
+
+
+def recvall(sock, n):
+    data = ''
+    while len(data) < n:
+        packet = sock.recv(n - len(data))
+        if not packet:
+            return None
+        data += packet.decode('utf-8')
+    return data
+
 
 def send_msg(sock, msg):
     msg = struct.pack('>I', len(msg)) + msg
@@ -705,7 +722,7 @@ class ClientHandler(threading.Thread):
             print("Client socket running")
         while self.running:
             try:
-                jsondata = self.clientsocket.recv(5000)
+                jsondata = recv_msg(self.clientsocket)
             except socket.timeout:
                 continue
             except socket.error:
@@ -718,7 +735,7 @@ class ClientHandler(threading.Thread):
                 print(jsondata)
             send_data = {}
             try:
-                data = json.loads(jsondata.decode('utf-8'))
+                data = json.loads(jsondata)
                 if debug:
                     print(data)
 
