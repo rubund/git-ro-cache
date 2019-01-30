@@ -735,6 +735,10 @@ class ClientHandler(threading.Thread):
             except socket.error:
                 self.running = False
                 break
+            except struct.error as e:
+                print("Recived struct.error. Closing connection: (%s)" % (str(e)))
+                self.running = False
+                break
             if not jsondata or not self.running:
                 self.running = False
                 break
