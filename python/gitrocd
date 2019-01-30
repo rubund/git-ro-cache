@@ -871,6 +871,8 @@ class ClientHandler(threading.Thread):
                 break
         clock.release()
         print("stopped client thread")
+        sys.stdout.flush()
+        sys.stderr.flush()
 
 
 class ServerThread(threading.Thread):
